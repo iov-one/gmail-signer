@@ -5,6 +5,7 @@ import { getAccessTokenFromRedirectUrl } from "./utils/getAccessTokenFromRedirec
 import { openGoogleAuthorizationPopup } from "./utils/openGoogleAuthorizationPopup";
 import { sendMessage } from "./utils/sendMessage";
 
+const GOOGLE_ACCESS_TOKEN_STORAGE_PATH = "/google/access-token";
 let signer: Window | null;
 
 export const connectButtonToSignInFlow = function (
@@ -47,7 +48,10 @@ const onSandboxMessage = createMessageCallback((message: Message): void => {
 
 const onAccessTokenReceived = (accessToken: GoogleAccessToken): void => {
   // Save it if it's not saved or update it anyway
-  localStorage.setItem("/google/access-token", JSON.stringify(accessToken));
+  localStorage.setItem(
+    GOOGLE_ACCESS_TOKEN_STORAGE_PATH,
+    JSON.stringify(accessToken)
+  );
   // Send it to the Auth frame
   const message: Message = {
     target: "Custodian",
@@ -63,7 +67,7 @@ const onAccessTokenReceived = (accessToken: GoogleAccessToken): void => {
 const onCustodianReady = function (): void {
   // Process the incoming message
   const savedToken: string | null = localStorage.getItem(
-    "/google/access-token"
+    GOOGLE_ACCESS_TOKEN_STORAGE_PATH
   );
   // Check if we already own an access token
   if (savedToken !== null) {
@@ -73,8 +77,13 @@ const onCustodianReady = function (): void {
     // without prompting the user
     try {
       const accessToken: GoogleAccessToken = JSON.parse(savedToken);
-      // Use saved token
-      onAccessTokenReceived(accessToken);
+      if (accessToken.expiresAt > Date.now()) {
+        // Token has expired
+        localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
+      } else {
+        // Use saved token
+        onAccessTokenReceived(accessToken);
+      }
     } catch {
       // Just do nothing
     }

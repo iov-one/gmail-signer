@@ -23,7 +23,7 @@ export const getAccessTokenFromRedirectUrl = (
   if ("token_type" in result && result.token_type === "Bearer") {
     const { scope } = result;
     return {
-      expiresIn: Number(result.expires_in),
+      expiresAt: 1000 * Number(result.expires_in) + Date.now(),
       scope: scope.split(","),
       state: result.state,
       token: result.access_token,
