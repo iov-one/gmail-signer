@@ -1,12 +1,17 @@
+export type TargetType = "Custodian" | "Signer" | "Root";
+
 export interface Message<T = any> {
-  readonly type: "Auth" | "Signer" | "Child";
-  readonly name: string;
+  readonly type: string;
+  readonly target: TargetType;
   readonly data: T;
 }
 
 export const isMessage = (object: any): object is Message => {
-  if ("type" in object && "name" in object) {
-    return object.type === "Auth" || object.type === "Signer";
+  if (typeof object !== "object") return false;
+  if ("target" in object && "type" in object) {
+    return ["Custodian", "Signer", "Root"].some(
+      (item: string): boolean => item === object.target
+    );
   } else {
     return false;
   }

@@ -35,18 +35,17 @@ const getCurrentMnemonic = async (
 };
 
 const onAuthenticated = (accessToken: GoogleAccessToken): void => {
-  console.log(accessToken);
   getCurrentMnemonic(accessToken).then((mnemonic: string | null): void => {
     if (mnemonic === null) {
       sendMessage(parent, {
-        type: "Child",
-        name: "RequestMnemonicCreation",
+        target: "Root",
+        type: "RequestMnemonicCreation",
         data: undefined,
       });
     } else {
       sendMessage(parent, {
-        type: "Signer",
-        name: "Initialize",
+        target: "Signer",
+        type: "Initialize",
         data: mnemonic,
       });
     }
@@ -54,16 +53,16 @@ const onAuthenticated = (accessToken: GoogleAccessToken): void => {
 };
 
 const handleMessage = (message: Message): void => {
-  switch (message.name) {
+  switch (message.type) {
     case "Authenticated":
       return onAuthenticated(message.data);
     default:
-      console.warn("unknown message: " + message.name);
+      console.warn("unknown message: " + message.type);
   }
 };
 
 window.onmessage = createMessageCallback((message: Message) => {
-  if (message.type !== "Auth") {
+  if (message.target !== "Custodian") {
     // We can only accept 1 type of message
     throw new Error("unknown message type cannot be handled");
   } else {
@@ -72,4 +71,10 @@ window.onmessage = createMessageCallback((message: Message) => {
 });
 
 // Notify my existence
-parent.postMessage("AuthFrameReady", "*");
+setTimeout(() => {
+  sendMessage(parent, {
+    target: "Root",
+    type: "CustodianReady",
+    data: undefined,
+  });
+}, 0);

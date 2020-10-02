@@ -1,4 +1,4 @@
-export const extractGoogleAuthToken = (
+export const getAccessTokenFromRedirectUrl = (
   location: Location
 ): GoogleAccessToken | boolean => {
   const { hash } = location;

@@ -49,6 +49,7 @@ const compileTypescriptFile = async (filePath) => {
                       moduleResolution: "node",
                       declaration: false,
                       lib: ["es2016", "dom", "es5"],
+                      sourceMap: true,
                     },
                   },
                 },

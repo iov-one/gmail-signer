@@ -5,5 +5,5 @@ export const sendMessage = (
   message: Message,
   origin = "*"
 ) => {
-  recipient.postMessage(JSON.stringify(message), origin);
+  recipient.postMessage(message, origin);
 };

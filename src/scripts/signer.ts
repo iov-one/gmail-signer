@@ -13,22 +13,22 @@ const onInitializeMessage = (mnemonic: string): void => {
     .createWallet(mnemonic)
     .then((): void => {
       sendMessage(parent, {
-        type: "Child",
-        name: "SignerReady",
+        target: "Root",
+        type: "SignerReady",
         data: undefined,
       });
     })
     .catch((error: any): void => {
       sendMessage(parent, {
-        type: "Child",
-        name: "Error",
+        target: "Root",
+        type: "Error",
         data: error,
       });
     });
 };
 
 const handleMessage = (message: Message): void => {
-  switch (message.name) {
+  switch (message.type) {
     case "Initialize":
       return onInitializeMessage(message.data);
     case "SignTx":
@@ -36,13 +36,13 @@ const handleMessage = (message: Message): void => {
     case "GetAddress":
       break;
     default:
-      console.warn("unknown message: " + message.name);
+      console.warn("unknown message: " + message.type);
   }
 };
 
 const onMessage = (message: Message): void => {
-  switch (message.type) {
-    case "Auth":
+  switch (message.target) {
+    case "Custodian":
       const { childWindow } = childContainer;
       // This message belongs to the child frame, so
       // we must redirect it
@@ -55,17 +55,11 @@ const onMessage = (message: Message): void => {
       return sendMessage(childWindow, message);
     case "Signer":
       return handleMessage(message);
-    case "Child":
+    case "Root":
       return sendMessage(parent, message);
     default:
       throw new Error("unknown message type cannot be handled");
   }
 };
 
-window.onmessage = (event: MessageEvent): void => {
-  if (event.data === "AuthFrameReady") {
-    window.onmessage = createMessageCallback(onMessage);
-    // Also tell the parent
-    parent.postMessage(event.data, "*");
-  }
-};
+window.onmessage = createMessageCallback(onMessage);

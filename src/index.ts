@@ -1,7 +1,7 @@
 import { Message } from "./types/message";
 import { createMessageCallback } from "./utils/createMessageCallback";
 import { createSandbox } from "./utils/createSandbox";
-import { extractGoogleAuthToken } from "./utils/extractGoogleAuthToken";
+import { getAccessTokenFromRedirectUrl } from "./utils/getAccessTokenFromRedirectUrl";
 import { openGoogleAuthorizationPopup } from "./utils/openGoogleAuthorizationPopup";
 import { sendMessage } from "./utils/sendMessage";
 
@@ -10,6 +10,7 @@ let signer: Window | null;
 export const connectButtonToSignInFlow = function (
   button: HTMLElement
 ): () => void {
+  // Now the click handler
   const handler = (): void => {
     if (signer === null) {
       throw new Error(
@@ -24,10 +25,14 @@ export const connectButtonToSignInFlow = function (
 };
 
 const onSandboxMessage = createMessageCallback((message: Message): void => {
-  if (message.type !== "Child") {
+  if (message.target !== "Root") {
     throw new Error("this type of message should never reach this window");
   } else {
-    switch (message.name) {
+    switch (message.type) {
+      case "CustodianReady":
+        return onCustodianReady();
+      case "Authenticated":
+        return onAccessTokenReceived(message.data);
       case "SignerReady":
         console.log("Yay! signer is ready...");
         break;
@@ -40,62 +45,65 @@ const onSandboxMessage = createMessageCallback((message: Message): void => {
   }
 });
 
-const onGoogleAuthenticationCompleted = (event: MessageEvent): void => {
-  // Remove listener
-  window.removeEventListener("message", onGoogleAuthenticationCompleted);
-  // Create a new event listener for sandboxed children
-  // messages
-  window.addEventListener("message", onSandboxMessage);
-  // Send authentication data to the GDrive frame
-  sendAccessToken(event.data);
-};
-
-const sendAccessToken = (asString: string): void => {
+const onAccessTokenReceived = (accessToken: GoogleAccessToken): void => {
   // Save it if it's not saved or update it anyway
-  localStorage.setItem("/google/access-token", asString);
+  localStorage.setItem("/google/access-token", JSON.stringify(accessToken));
   // Send it to the Auth frame
   const message: Message = {
-    type: "Auth",
-    name: "Authenticated",
-    data: JSON.parse(asString),
+    target: "Custodian",
+    type: "Authenticated",
+    data: accessToken,
   };
+  // Create a new event listener for sandboxed children
+  // messages
+  // Now sed the access token to the Custodian
   sendMessage(signer, message, location.origin);
 };
 
-const onAuthFrameReady = (event: MessageEvent): void => {
-  const { data } = event;
-  if (data === "AuthFrameReady") {
-    const savedToken: string | null = localStorage.getItem(
-      "/google/access-token"
-    );
-    // Check if we already own an access token
-    if (savedToken === null) {
-      // We only listen for 1 message
-      window.addEventListener("message", onGoogleAuthenticationCompleted);
-    } else {
-      sendAccessToken(savedToken);
+const onCustodianReady = function (): void {
+  // Process the incoming message
+  const savedToken: string | null = localStorage.getItem(
+    "/google/access-token"
+  );
+  // Check if we already own an access token
+  if (savedToken !== null) {
+    // FIXME: ideally we should request disabling the button
+    //        waiting for this
+    // If we do have it, just initialize the rest
+    // without prompting the user
+    try {
+      const accessToken: GoogleAccessToken = JSON.parse(savedToken);
+      // Use saved token
+      onAccessTokenReceived(accessToken);
+    } catch {
+      // Just do nothing
     }
   }
 };
 
 // Run this on startup
 window.addEventListener("load", (): void => {
-  const accessToken: GoogleAccessToken | boolean = extractGoogleAuthToken(
-    location
-  );
+  const accessToken:
+    | GoogleAccessToken
+    | boolean = getAccessTokenFromRedirectUrl(location);
+  // This is always used
+  window.addEventListener("message", onSandboxMessage);
+  // Check if there's a token already
   if (accessToken === false) {
     // Without this, the loading spinner in the browser tab
     // will spin forever/very long time
     setTimeout((): void => {
-      // Listen for the notification of the frame being ready
-      window.addEventListener("message", onAuthFrameReady);
       // Create the sandbox
       signer = createSandbox();
     }, 0);
   } else {
     const { opener } = window;
     // Send back the result
-    opener.postMessage(JSON.stringify(accessToken), "*");
+    sendMessage(opener, {
+      target: "Root",
+      type: "Authenticated",
+      data: accessToken,
+    });
     // Close me
     window.close();
   }
