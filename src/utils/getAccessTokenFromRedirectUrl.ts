@@ -1,8 +1,16 @@
+import { GoogleOAuthError } from "../types/googleOAuthError";
+
+export const InvalidUrlError: GoogleOAuthError = {
+  reason: "Invalid URL provided to parse the token information",
+};
+
 export const getAccessTokenFromRedirectUrl = (
   location: Location
-): GoogleAccessToken | boolean => {
+): GoogleAccessToken | GoogleOAuthError => {
   const { hash } = location;
-  if (hash === "") return false;
+  if (hash === "") {
+    return InvalidUrlError;
+  }
   const queryString: string = hash.slice(1);
   const result = queryString
     .split("&")
@@ -20,7 +28,11 @@ export const getAccessTokenFromRedirectUrl = (
       },
       {}
     );
-  if ("token_type" in result && result.token_type === "Bearer") {
+  if ("error" in result) {
+    return {
+      reason: result.error,
+    };
+  } else if ("token_type" in result && result.token_type === "Bearer") {
     const { scope } = result;
     return {
       expiresAt: 1000 * Number(result.expires_in) + Date.now(),

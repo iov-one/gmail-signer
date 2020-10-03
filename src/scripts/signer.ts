@@ -1,5 +1,7 @@
+import custodian from "../templates/custodian.html";
 import { Message } from "../types/message";
 import { createMessageCallback } from "../utils/createMessageCallback";
+import { createSandboxedIframe } from "../utils/createSandboxedIframe";
 import { sendMessage } from "../utils/sendMessage";
 import { ChildContainer } from "./signerSources/childContainer";
 import { WalletContainer } from "./signerSources/walletContainer";
@@ -63,3 +65,8 @@ const onMessage = (message: Message): void => {
 };
 
 window.onmessage = createMessageCallback(onMessage);
+// Entry point for the signer
+window.onload = (): void => {
+  createSandboxedIframe(custodian);
+  console.log("signer loaded");
+};

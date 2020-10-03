@@ -7,7 +7,8 @@
  * application as a single entity and allow applications to sign transactions inside these
  * sandboxed and isolated iframes.
  */
-const parser = require("node-html-parser");
+const cheerio = require("cheerio");
+const webpackConfig = require("./inner.webpack.config");
 const webpack = require("webpack");
 const fs = require("fs");
 const path = require("path");
@@ -16,114 +17,51 @@ const compileTypescriptFile = async (filePath) => {
   return new Promise((resolve, reject) => {
     const name = path.basename(filePath.replace(/\.ts$/, ""));
     const resultPath = path.resolve(__dirname, "lib");
-    webpack(
-      {
-        mode: "production",
-        entry: {
-          [name]: filePath,
-        },
-        output: {
-          path: resultPath,
-          filename: "[name].js",
-          libraryTarget: "umd",
-          library: "MyLib",
-          umdNamedDefine: true,
-        },
-        resolve: {
-          extensions: [".ts", ".js"],
-        },
-        module: {
-          rules: [
-            {
-              test: /\.ts$/,
-              use: [
-                {
-                  loader: "babel-loader",
-                },
-                {
-                  loader: "ts-loader",
-                  options: {
-                    compilerOptions: {
-                      module: "ES2015",
-                      target: "ES5",
-                      moduleResolution: "node",
-                      declaration: false,
-                      lib: ["es2016", "dom", "es5"],
-                      sourceMap: true,
-                    },
-                  },
-                },
-              ],
-            },
-          ],
-        },
-      },
-      (error, stats) => {
-        if (error) {
-          reject(error);
-        } else if (stats.hasErrors()) {
-          reject(stats);
-        } else {
-          // FIXME: show stats
-          const temporaryPath = path.join(resultPath, `${name}.js`);
-          const contentBuffer = fs.readFileSync(temporaryPath);
-          // Delete the temporary file
-          fs.unlinkSync(temporaryPath);
-          // Return ths script content
-          resolve(contentBuffer);
-        }
+    webpack(webpackConfig(name, filePath, resultPath), (error, stats) => {
+      if (error) {
+        reject(error);
+      } else if (stats.hasErrors()) {
+        reject(stats);
+      } else {
+        // FIXME: show stats
+        const temporaryPath = path.join(resultPath, `${name}.js`);
+        const contentBuffer = fs.readFileSync(temporaryPath);
+        // Delete the temporary file
+        fs.unlinkSync(temporaryPath);
+        // Return ths script content
+        resolve(contentBuffer);
       }
-    );
+    });
   });
 };
 
-const handleScripts = async (content, baseDir, asDataUrl = false) => {
-  const document =
-    content instanceof parser.HTMLElement
-      ? content
-      : parser.parse(content.toString("utf-8"));
-  const scripts = document.querySelectorAll("script");
-  for (const script of scripts) {
-    if (script.getAttribute("type") === "text/prs.typescript") {
-      const absolutePath = path.resolve(baseDir, script.getAttribute("src"));
-      script.setAttribute("type", "application/javascript");
-      // Compile typescript
-      const compiled = await compileTypescriptFile(absolutePath);
-      // Replace the src with a data uri
-      script.setAttribute(
-        "src",
-        `data:application/javascript;base64,${compiled.toString("base64")}`
-      );
-    }
+const handleScripts = async (content, baseDir) => {
+  const document = cheerio.load(content);
+  const script = document("script");
+  // Wait to parse all the scripts
+  if (script.attr("type") === "text/prs.typescript") {
+    const absolutePath = path.resolve(baseDir, script.attr("src"));
+    // Change the type of course
+    script.attr("type", "application/javascript");
+    // Compile typescript
+    const compiled = await compileTypescriptFile(absolutePath);
+    // Replace the src with a data uri
+    script.removeAttr("src");
+    // Write the script into the iframe, note that we don't
+    // want the library to escape anything so we use the text
+    // method
+    script.text(compiled.toString());
   }
-  const html = document.removeWhitespace().toString();
-  if (asDataUrl) {
-    const buffer = Buffer.from(html);
-    return `data:text/html;base64,${buffer.toString("base64")}`;
-  } else {
-    return html;
-  }
+  return document;
 };
 
-module.exports = function (content, map, meta) {
+const loader = function (content, map, meta) {
   const callback = this.async();
   const loader = async () => {
-    const document = parser.parse(content);
     // Get all iframes (there will be just 1)
-    const frames = document.querySelectorAll("iframe");
-    const baseDir = path.dirname(this.resource);
-    for (const frame of frames) {
-      const src = frame.getAttribute("src");
-      // Now try to read the file
-      const url = await handleScripts(
-        fs.readFileSync(path.resolve(baseDir, src)),
-        baseDir,
-        true
-      );
-      // Replace the src attribute with a data url
-      frame.setAttribute("src", url);
-    }
-    return handleScripts(document, baseDir);
+    const document = await handleScripts(content, path.dirname(this.resource));
+    // Now convert it to string
+    return document.html();
   };
   loader()
     .then((result) => {
@@ -133,3 +71,5 @@ module.exports = function (content, map, meta) {
       console.log(error);
     });
 };
+
+module.exports = loader;

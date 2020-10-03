@@ -3,19 +3,16 @@ import { isMessage, Message } from "../types/message";
 export const createMessageCallback = (
   callback: (message: Message) => void
 ): ((event: MessageEvent) => void) => {
-  return (event: MessageEvent): void => {
+  return function (event: MessageEvent): void {
     const { data } = event;
     try {
       if (isMessage(data)) return callback(data);
+      // The only case in which we are interested when it's not a
+      // valid local message, is when it's string. We then try to
+      // convert it to a message and call the function again
       if (typeof data === "string") {
-        const message: any = JSON.parse(data);
-        // If this is not a message, discard it
-        if (!isMessage(message)) return;
-        // Otherwise, send it to the handler
-        return callback(message);
-      } else {
-        // Simply ignore this
-        console.log("ignoring this message: ", data);
+        // Convert to object and call self again
+        return this.apply(this, JSON.parse(data));
       }
     } catch (error) {
       if (data.length > 0) {

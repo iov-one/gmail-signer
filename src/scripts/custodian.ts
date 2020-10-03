@@ -35,6 +35,7 @@ const getCurrentMnemonic = async (
 };
 
 const onAuthenticated = (accessToken: GoogleAccessToken): void => {
+  console.log(accessToken);
   getCurrentMnemonic(accessToken).then((mnemonic: string | null): void => {
     if (mnemonic === null) {
       sendMessage(parent, {
@@ -70,11 +71,13 @@ window.onmessage = createMessageCallback((message: Message) => {
   }
 });
 
-// Notify my existence
-setTimeout(() => {
+// Entry point for the custodian
+window.onload = (): void => {
+  // Let the root window know that I can start reading messages :)
   sendMessage(parent, {
     target: "Root",
     type: "CustodianReady",
     data: undefined,
   });
-}, 0);
+  console.log("custodian loaded");
+};
