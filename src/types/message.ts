@@ -1,9 +1,10 @@
 export type TargetType = "Custodian" | "Signer" | "Root";
 
 export interface Message<T = any> {
+  readonly uid?: string;
   readonly type: string;
   readonly target: TargetType;
-  readonly data: T;
+  readonly data?: T;
 }
 
 export const isMessage = (object: any): object is Message => {

@@ -1,7 +1,8 @@
+import { GoogleAccessToken } from "../types/googleAccessToken";
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "../constants";
 import { onAccessTokenReceived } from "./onAccessTokenReceived";
 
-export const onCustodianReady = (): void => {
+export const onCustodianReady = (signerWindow: Window): void => {
   // Attempt to see if we already have a token to query the GDrive
   // api with
   const savedToken: string | null = localStorage.getItem(
@@ -21,7 +22,7 @@ export const onCustodianReady = (): void => {
         localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
       } else {
         // Use saved token
-        onAccessTokenReceived(accessToken);
+        onAccessTokenReceived(signerWindow, accessToken);
       }
     } catch {
       // Just do nothing

@@ -1,7 +1,6 @@
 const keyValuePaster = (
   object: { [key: string]: string | number },
-  glue: string,
-  urlEncoded: boolean
+  glue: string
 ): string => {
   const entries: [string, string | number][] = Object.entries(object);
   return entries
@@ -13,8 +12,8 @@ const keyValuePaster = (
 
 export const toQueryString = (object: {
   [key: string]: string | number;
-}): string => keyValuePaster(object, "&", true);
+}): string => keyValuePaster(object, "&");
 
 export const toWindowOptions = (object: {
   [key: string]: string | number;
-}): string => keyValuePaster(object, ",", false);
+}): string => keyValuePaster(object, ",");

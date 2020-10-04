@@ -11,13 +11,11 @@ module.exports = {
     path: path.resolve(__dirname, "lib"),
     filename: "[name].js",
     libraryTarget: "umd",
-    library: "MyLib",
     umdNamedDefine: true,
   },
   resolve: {
     extensions: [".ts", ".js"],
   },
-  devtool: "source-map",
   module: {
     rules: [
       {
@@ -32,7 +30,7 @@ module.exports = {
   },
   performance: {
     hints: false,
-    maxEntrypointSize: 512000,
-    maxAssetSize: 512000,
+    maxEntrypointSize: 2097152,
+    maxAssetSize: 2097152,
   },
 };

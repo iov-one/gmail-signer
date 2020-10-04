@@ -1,21 +1,16 @@
 const loaders = { iframe: "./iframe-loader.js" };
+const options = require("./tsconfig.json");
+const globalWebpackConfig = require("./webpack.config");
 
 module.exports = (name, filePath, resultPath) => ({
-  mode: "production",
+  ...globalWebpackConfig,
   entry: {
     [name]: filePath,
   },
   output: {
     path: resultPath,
-    filename: "[name].js",
-    libraryTarget: "umd",
-    library: "MyLib",
-    umdNamedDefine: true,
+    ...globalWebpackConfig.output,
   },
-  resolve: {
-    extensions: [".ts", ".js"],
-  },
-  devtool: "source-map",
   module: {
     rules: [
       {
@@ -32,12 +27,7 @@ module.exports = (name, filePath, resultPath) => ({
             loader: "ts-loader",
             options: {
               compilerOptions: {
-                module: "ES2015",
-                target: "ES5",
-                moduleResolution: "node",
-                declaration: false,
-                lib: ["es2016", "dom", "es5"],
-                sourceMap: true,
+                ...options.compilerOptions,
               },
             },
           },

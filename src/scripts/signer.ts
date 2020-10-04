@@ -1,72 +1,53 @@
-import custodian from "../templates/custodian.html";
 import { Message } from "../types/message";
 import { createMessageCallback } from "../utils/createMessageCallback";
-import { createSandboxedIframe } from "../utils/createSandboxedIframe";
 import { sendMessage } from "../utils/sendMessage";
-import { ChildContainer } from "./signerSources/childContainer";
-import { WalletContainer } from "./signerSources/walletContainer";
+import { onCreateAccount } from "./signer/handlers/onCreateAccount";
+import { onGetAddress } from "./signer/handlers/onGetAddress";
+import { onInitialize } from "./signer/handlers/onInitialize";
+import { Wallet } from "./signer/wallet";
 
-const childContainer: ChildContainer = new ChildContainer();
-const walletContainer: WalletContainer = new WalletContainer();
+const wallet: Wallet = new Wallet();
 
-const onInitializeMessage = (mnemonic: string): void => {
-  // Now we can initialize the wallet
-  walletContainer
-    .createWallet(mnemonic)
-    .then((): void => {
-      sendMessage(parent, {
-        target: "Root",
-        type: "SignerReady",
-        data: undefined,
-      });
-    })
-    .catch((error: any): void => {
-      sendMessage(parent, {
-        target: "Root",
-        type: "Error",
-        data: error,
-      });
-    });
-};
-
-const handleMessage = (message: Message): void => {
+const handleMessage = async (message: Message): Promise<Message | null> => {
+  const { data } = message;
   switch (message.type) {
     case "Initialize":
-      return onInitializeMessage(message.data);
+      return onInitialize(data, wallet);
     case "SignTx":
       break;
     case "GetAddress":
-      break;
+      return onGetAddress(wallet);
+    case "CreateAccount":
+      return onCreateAccount(data.hdPath, data.prefix);
     default:
       console.warn("unknown message: " + message.type);
   }
 };
 
-const onMessage = (message: Message): void => {
-  switch (message.target) {
-    case "Custodian":
-      const { childWindow } = childContainer;
-      // This message belongs to the child frame, so
-      // we must redirect it
-      if (childWindow === null) {
-        throw new Error(
-          "cannot forward this message, not initialized properly"
-        );
-      }
-      // Send as is, we don't want to use this
-      return sendMessage(childWindow, message);
-    case "Signer":
-      return handleMessage(message);
-    case "Root":
-      return sendMessage(parent, message);
-    default:
-      throw new Error("unknown message type cannot be handled");
+const onMessage = async (message: Message): Promise<void> => {
+  if (message.target !== "Signer") {
+    throw new Error("unknown message type cannot be handled");
+  } else {
+    const response: Message | null = await handleMessage(message);
+    if (response !== null) {
+      sendMessage(parent, {
+        ...response,
+        // Overwrite the uid to let the sender know
+        // this was their original message if the want
+        // or need to
+        uid: message.uid,
+      });
+    }
   }
 };
 
 window.onmessage = createMessageCallback(onMessage);
 // Entry point for the signer
 window.onload = (): void => {
-  createSandboxedIframe(custodian);
-  console.log("signer loaded");
+  // Let the root window know that I can start reading messages :)
+  sendMessage(parent, {
+    target: "Root",
+    type: "Ready",
+    data: undefined,
+  });
 };

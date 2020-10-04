@@ -1,7 +1,7 @@
 export const createSandboxedIframe = (
   content: any,
   permissions: string[] = ["allow-scripts"]
-): Window => {
+): HTMLIFrameElement => {
   const { document } = window;
   const { body } = document;
   if (body === null) {
@@ -22,5 +22,5 @@ export const createSandboxedIframe = (
   iframe.setAttribute("style", "display: none");
   iframe.setAttribute("sandbox", permissions.join(" "));
   // Now we can export
-  return iframe.contentWindow;
+  return iframe;
 };

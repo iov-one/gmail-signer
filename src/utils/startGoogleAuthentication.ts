@@ -1,12 +1,15 @@
-import { GoogleConfiguration } from "../types/googleConfiguration";
+import redirectPage from "../templates/google-redirection-page.html";
+import { GoogleAccessToken } from "../types/googleAccessToken";
+import { Application } from "../types/application";
 import {
   GoogleOAuthError,
   isGoogleOAuthError,
 } from "../types/googleOAuthError";
-import { getAccessTokenFromRedirectUrl } from "./getAccessTokenFromRedirectUrl";
+import { extractAccessTokeFromUrl } from "./extractAccessTokeFromUrl";
 import { toQueryString, toWindowOptions } from "./helpers";
 import { sendMessage } from "./sendMessage";
-import redirectPage from "../templates/google-redirection-page.html";
+
+import { v4 as uuid } from "uuid";
 
 const GOOGLE_REDIRECT_URI = "/gdrive-signer/on-auth-result";
 
@@ -36,7 +39,7 @@ document.addEventListener("DOMContentLoaded", (): void => {
     window.onload = (): void => {
       const accessTokenOrError:
         | GoogleAccessToken
-        | GoogleOAuthError = getAccessTokenFromRedirectUrl(location);
+        | GoogleOAuthError = extractAccessTokeFromUrl(location);
       if (!isGoogleOAuthError(accessTokenOrError)) {
         const { opener } = window;
         // Send back the result
@@ -53,9 +56,7 @@ document.addEventListener("DOMContentLoaded", (): void => {
   }
 });
 
-export const startGoogleAuthentication = (
-  configuration: GoogleConfiguration
-): void => {
+export const startGoogleAuthentication = (configuration: Application): void => {
   const queryString: string = toQueryString({
     client_id: configuration.clientID,
     response_type: "token",
@@ -72,7 +73,7 @@ export const startGoogleAuthentication = (
     toWindowOptions({
       menubar: "no",
       location: "no",
-      resizeable: "yes",
+      resizeable: "no",
       status: "no",
       left: (screen.width - size) / 2,
       width: size,

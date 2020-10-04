@@ -11,6 +11,7 @@ const cheerio = require("cheerio");
 const webpackConfig = require("./inner.webpack.config");
 const webpack = require("webpack");
 const fs = require("fs");
+const logStats = require("./utils");
 const path = require("path");
 
 const compileTypescriptFile = async (filePath) => {
@@ -19,17 +20,29 @@ const compileTypescriptFile = async (filePath) => {
     const resultPath = path.resolve(__dirname, "lib");
     webpack(webpackConfig(name, filePath, resultPath), (error, stats) => {
       if (error) {
-        reject(error);
-      } else if (stats.hasErrors()) {
-        reject(stats);
+        reject(error.details);
       } else {
-        // FIXME: show stats
-        const temporaryPath = path.join(resultPath, `${name}.js`);
-        const contentBuffer = fs.readFileSync(temporaryPath);
-        // Delete the temporary file
-        fs.unlinkSync(temporaryPath);
-        // Return ths script content
-        resolve(contentBuffer);
+        const information = stats.toJson();
+        if (stats.hasErrors()) {
+          const { errors } = information;
+          reject(errors.join("\n"));
+        } else {
+          if (stats.hasWarnings()) {
+            const { warnings } = information;
+            // Show them but still emit the file
+            console.warn(warnings.join("\n"));
+          } else {
+            // Display stats as default webpack does
+            logStats(information);
+          }
+          // FIXME: show stats
+          const temporaryPath = path.join(resultPath, `${name}.js`);
+          const contentBuffer = fs.readFileSync(temporaryPath);
+          // Delete the temporary file
+          fs.unlinkSync(temporaryPath);
+          // Return ths script content
+          resolve(contentBuffer);
+        }
       }
     });
   });
@@ -67,8 +80,10 @@ const loader = function (content, map, meta) {
     .then((result) => {
       callback(null, result, map, meta);
     })
-    .catch((error) => {
-      console.log(error);
+    .catch((message) => {
+      this.emitError(message);
+      // Also print it?
+      console.error(message);
     });
 };
 

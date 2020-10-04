@@ -1,9 +1,9 @@
 import { isMessage, Message } from "../types/message";
 
 export const createMessageCallback = (
-  callback: (message: Message) => void
+  callback: (message: Message) => Promise<void>
 ): ((event: MessageEvent) => void) => {
-  return function (event: MessageEvent): void {
+  return function (event: MessageEvent): Promise<void> {
     const { data } = event;
     try {
       if (isMessage(data)) return callback(data);

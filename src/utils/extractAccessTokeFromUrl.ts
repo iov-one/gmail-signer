@@ -1,10 +1,11 @@
+import { GoogleAccessToken } from "../types/googleAccessToken";
 import { GoogleOAuthError } from "../types/googleOAuthError";
 
 export const InvalidUrlError: GoogleOAuthError = {
   reason: "Invalid URL provided to parse the token information",
 };
 
-export const getAccessTokenFromRedirectUrl = (
+export const extractAccessTokeFromUrl = (
   location: Location
 ): GoogleAccessToken | GoogleOAuthError => {
   const { hash } = location;

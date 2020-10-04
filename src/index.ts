@@ -1,2 +1,2 @@
-export { GDriveSigner, GDriveSignerState } from "./types/gDriveSigner";
-export { GoogleConfiguration } from "./types/googleConfiguration";
+export { Signer, Events, ReadyState } from "./signer";
+export { Application } from "./types/application";
