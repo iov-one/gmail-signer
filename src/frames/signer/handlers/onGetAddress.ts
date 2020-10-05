@@ -1,7 +1,7 @@
 import { Message } from "../../../types/message";
-import { Wallet } from "../wallet";
 
-export const onGetAddress = async (wallet: Wallet): Promise<Message> => {
+export const onGetAddress = async (): Promise<Message> => {
+  const { wallet } = window;
   const address: string = await wallet.getAddress();
   if (address === undefined) {
     return {

@@ -8,7 +8,7 @@
  * sandboxed and isolated iframes.
  */
 const cheerio = require("cheerio");
-const webpackConfig = require("./inner.webpack.config");
+const webpackConfig = require("./webpack.nested.config");
 const webpack = require("webpack");
 const fs = require("fs");
 const logStats = require("./utils");
@@ -48,12 +48,12 @@ const compileTypescriptFile = async (filePath) => {
   });
 };
 
-const handleScripts = async (content, baseDir) => {
+const handleScripts = async (content) => {
   const document = cheerio.load(content);
   const script = document("script");
-  // Wait to parse all the scripts
+  // Wait to parse all the frames
   if (script.attr("type") === "text/prs.typescript") {
-    const absolutePath = path.resolve(baseDir, script.attr("src"));
+    const absolutePath = path.resolve(__dirname, script.attr("src"));
     // Change the type of course
     script.attr("type", "application/javascript");
     // Compile typescript
@@ -72,7 +72,7 @@ const loader = function (content, map, meta) {
   const callback = this.async();
   const loader = async () => {
     // Get all iframes (there will be just 1)
-    const document = await handleScripts(content, path.dirname(this.resource));
+    const document = await handleScripts(content);
     // Now convert it to string
     return document.html();
   };

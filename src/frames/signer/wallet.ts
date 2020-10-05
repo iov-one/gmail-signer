@@ -1,11 +1,14 @@
-import { AccountData, Secp256k1Wallet } from "@cosmjs/launchpad";
+import {
+  AccountData,
+  makeSignBytes,
+  Secp256k1Wallet,
+  StdSignature,
+  StdTx,
+} from "@cosmjs/launchpad";
 import { parseHDPath } from "./parseHDPath";
 
 export class Wallet {
   private wallet: Secp256k1Wallet | null = null;
-  constructor() {
-    console.log("new wallet");
-  }
 
   public async initialize(
     mnemonic: string,
@@ -17,7 +20,6 @@ export class Wallet {
       parseHDPath(hdPath),
       prefix
     );
-    console.log(this.wallet);
   }
 
   public async getAddress(): Promise<string | undefined> {
@@ -26,9 +28,23 @@ export class Wallet {
       return undefined;
     }
     const accounts: ReadonlyArray<AccountData> = await wallet.getAccounts();
-    if (accounts.length !== 0) {
+    // Why would there be more than 1 account?
+    if (accounts.length !== 1) {
       return undefined;
     }
     return accounts[0].address;
+  }
+
+  public async signTx(tx: StdTx): Promise<StdTx> {
+    const { wallet } = this;
+    const signBytes = makeSignBytes(tx.msg, tx.fee, "", tx.memo, 1, 1);
+    const signature: StdSignature = await wallet.sign(
+      await this.getAddress(),
+      signBytes
+    );
+    return {
+      ...tx,
+      signatures: [signature],
+    };
   }
 }

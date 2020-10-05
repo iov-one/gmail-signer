@@ -1,10 +1,7 @@
 import { Message } from "../../../types/message";
-import { Wallet } from "../wallet";
 
-export const onInitialize = async (
-  mnemonic: string,
-  wallet: Wallet
-): Promise<Message> => {
+export const onInitialize = async (mnemonic: string): Promise<Message> => {
+  const { wallet } = window;
   // Now we can initialize the wallet
   try {
     await wallet.initialize(mnemonic, "m/44'/234'/0'/0/0", "star");

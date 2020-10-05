@@ -4,19 +4,24 @@ import { sendMessage } from "../utils/sendMessage";
 import { onCreateAccount } from "./signer/handlers/onCreateAccount";
 import { onGetAddress } from "./signer/handlers/onGetAddress";
 import { onInitialize } from "./signer/handlers/onInitialize";
+import { onSignTx } from "./signer/handlers/onSignTx";
 import { Wallet } from "./signer/wallet";
 
-const wallet: Wallet = new Wallet();
+declare global {
+  interface Window {
+    wallet: Wallet;
+  }
+}
 
 const handleMessage = async (message: Message): Promise<Message | null> => {
   const { data } = message;
   switch (message.type) {
     case "Initialize":
-      return onInitialize(data, wallet);
+      return onInitialize(data);
     case "SignTx":
-      break;
+      return onSignTx(data);
     case "GetAddress":
-      return onGetAddress(wallet);
+      return onGetAddress();
     case "CreateAccount":
       return onCreateAccount(data.hdPath, data.prefix);
     default:
@@ -44,6 +49,7 @@ const onMessage = async (message: Message): Promise<void> => {
 window.onmessage = createMessageCallback(onMessage);
 // Entry point for the signer
 window.onload = (): void => {
+  window.wallet = new Wallet();
   // Let the root window know that I can start reading messages :)
   sendMessage(parent, {
     target: "Root",

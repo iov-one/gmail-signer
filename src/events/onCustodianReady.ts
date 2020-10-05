@@ -20,6 +20,7 @@ export const onCustodianReady = (signerWindow: Window): void => {
       if (accessToken.expiresAt < Date.now()) {
         // Token has expired
         localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
+        console.log("token expired");
       } else {
         // Use saved token
         onAccessTokenReceived(signerWindow, accessToken);

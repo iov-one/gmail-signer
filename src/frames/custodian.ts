@@ -1,20 +1,55 @@
 import signer from "../templates/signer.html";
+import { GoogleAccessToken } from "../types/googleAccessToken";
 import { Message } from "../types/message";
 import { createMessageCallback } from "../utils/createMessageCallback";
 import { createSandboxedIframe } from "../utils/createSandboxedIframe";
 import { sendMessage } from "../utils/sendMessage";
 import { onAuthenticated } from "./custodian/handlers/onAuthenticated";
+import { onDeleteAccount } from "./custodian/handlers/onDeleteAccount";
 import { onSaveMnemonic } from "./custodian/handlers/onSaveMnemonic";
 import { onSignOut } from "./custodian/handlers/onSignOut";
 import { ChildContainer } from "./signer/childContainer";
 
 const CHILD_CONTAINER: ChildContainer = new ChildContainer();
 
+declare global {
+  interface Window {
+    accessToken: GoogleAccessToken;
+  }
+}
+
+const showSandbox = (): void => {
+  const { style } = CHILD_CONTAINER.child;
+  style.display = "initial";
+};
+const hideSandbox = (): void => {
+  const { style } = CHILD_CONTAINER.child;
+  style.display = "none";
+};
+
 const handleMessage = async (message: Message): Promise<Message | null> => {
   const { data } = message;
   switch (message.type) {
     case "Authenticated":
       return onAuthenticated(data);
+    case "ShowModal":
+      showSandbox();
+      // Propagate to the parent
+      sendMessage(parent, {
+        target: "Root",
+        type: "ShowModal",
+      });
+      break;
+    case "ModalDismissed":
+      hideSandbox();
+      // Propagate to the parent
+      sendMessage(parent, {
+        target: "Root",
+        type: "ShowModal",
+      });
+      break;
+    case "DeleteAccount":
+      return onDeleteAccount();
     case "SignOut":
       return onSignOut();
     case "SaveMnemonic":
@@ -31,7 +66,7 @@ const onMessage = async (message: Message): Promise<void> => {
       const response: Message | null = await handleMessage(message);
       if (response !== null) {
         if (response.target === "Signer") {
-          sendMessage(child, {
+          sendMessage(child.contentWindow, {
             ...response,
             // Overwrite the uid to let the sender know
             // this was their original message if the want
@@ -62,7 +97,7 @@ const onMessage = async (message: Message): Promise<void> => {
         );
       }
       // Send as is, we don't want to use this
-      return sendMessage(child, message);
+      return sendMessage(child.contentWindow, message);
     case "Root":
       return sendMessage(parent, message);
     default:
@@ -73,7 +108,6 @@ window.onmessage = createMessageCallback(onMessage);
 
 // Entry point for the custodian
 window.onload = (): void => {
-  const iframe: HTMLIFrameElement = createSandboxedIframe(signer);
   // Assign this here and get subsequent access to it
-  CHILD_CONTAINER.child = iframe.contentWindow;
+  CHILD_CONTAINER.child = createSandboxedIframe(signer);
 };

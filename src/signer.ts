@@ -1,8 +1,8 @@
 import * as uuid from "uuid";
-import { Application } from "..";
 import { onAccessTokenReceived } from "./events/onAccessTokenReceived";
 import { onCustodianReady } from "./events/onCustodianReady";
 import content from "./templates/custodian.html";
+import { Application } from "./types/application";
 import { CommonError } from "./types/commonError";
 import { Message } from "./types/message";
 import { createMessageCallback } from "./utils/createMessageCallback";
@@ -31,9 +31,9 @@ interface PromiseResolver {
 }
 
 export class Signer {
-  private sandbox: Window = null;
+  private sandbox: HTMLIFrameElement = null;
   private config: Application | null = null;
-  private promiseResolvers: { [id: string]: PromiseResolver } = {};
+  private resolvers: { [id: string]: PromiseResolver } = {};
   private eventHandlers: {
     [event in Events]: (...args: any) => any;
   } = {
@@ -49,6 +49,18 @@ export class Signer {
     }
   }
 
+  private showSandbox(): void {
+    const { style } = this.sandbox;
+    // Set visible for a moment
+    style.display = "initial";
+  }
+
+  private hideSandbox(): void {
+    const { style } = this.sandbox;
+    // Set visible for a moment
+    style.display = "none";
+  }
+
   /**
    * Core message handler to interact with the sandboxed frame(s)
    *
@@ -58,23 +70,33 @@ export class Signer {
    *       because it needs to have a well defined "this" object
    */
   private onMessage = async (message: Message): Promise<void> => {
+    const { sandbox } = this;
     if (message.target !== "Root") {
       throw new Error("this type of message should never reach this window");
     } else {
-      console.log(message);
       switch (message.type) {
         case "Ready":
           this.setReadyState(ReadyState.Ready);
           // Try to auto-authenticate
-          return onCustodianReady(this.sandbox);
+          return onCustodianReady(sandbox.contentWindow);
         case "Authenticated":
           this.setReadyState(ReadyState.Authenticated);
-          return onAccessTokenReceived(this.sandbox, message.data);
+          return onAccessTokenReceived(sandbox.contentWindow, message.data);
+        case "ShowModal":
+          this.showSandbox();
+          break;
+        case "ModalDismissed":
+          this.hideSandbox();
+          break;
         case "SignerReady":
           this.setReadyState(ReadyState.SignedIn);
           break;
+        case "SendSignedTx":
+          this.forwardMessageToPromiseResolver(message);
+          break;
         case "RequestMnemonicCreation":
           this.setReadyState(ReadyState.NeedsToCreateMnemonic);
+          this.forwardMessageToPromiseResolver(message);
           break;
         case "SignedOut":
           this.setReadyState(ReadyState.SignedOut);
@@ -89,10 +111,17 @@ export class Signer {
     }
   };
 
+  /**
+   * onError
+   *
+   * @param message
+   *
+   * @private
+   */
   private onError(message: Message): void {
     const { uid } = message;
     if (uid !== undefined) {
-      const resolver: PromiseResolver | undefined = this.promiseResolvers[uid];
+      const resolver: PromiseResolver | undefined = this.getResolver(uid);
       if (resolver !== undefined) {
         resolver.reject(message.data);
       } else {
@@ -135,26 +164,35 @@ export class Signer {
     }
   };
 
+  private getResolver(uuid: string): PromiseResolver | undefined {
+    if (uuid in this.resolvers) {
+      const resolver: PromiseResolver = this.resolvers[uuid];
+      delete this.resolvers[uuid];
+      return resolver;
+    } else {
+      return undefined;
+    }
+  }
+
   /**
    * Forward the message to it's resolver, it must exist or we must throw
    *
    * @param message
    * @private
    */
-  private forwardMessageToPromiseResolver(message: Message) {
-    if (message.uid === undefined) {
+  private forwardMessageToPromiseResolver(message: Message): void {
+    const { uid } = message;
+    if (uid === undefined) {
       console.warn("received message that requires a resolver but has no uid");
     } else {
-      const resolver: PromiseResolver = this.promiseResolvers[message.uid];
+      const resolver: PromiseResolver | undefined = this.getResolver(uid);
       if (resolver === undefined) {
-        throw new Error(
-          "message with uid `" +
-            message.uid +
-            "' received and no resolver was setup for it"
-        );
+        // Just ignore, it's ok because this is a valid situation
+        return;
       } else {
         // Now resolve the promise
         resolver.resolve(message.data);
+        // Remove the resolver now
       }
     }
   }
@@ -163,27 +201,31 @@ export class Signer {
    * Send a message and setup a promise resolver so that when there's a response
    * we can forward to response to the resolver and resolve/reject the promise
    *
-   * @param resolve
-   * @param reject
-   * @param message
+   * @param message The message we are sending as a promise
    *
    * @private
    */
-  private sendMessageWithResolver(
-    resolve: (...args: any[]) => void,
-    reject: (error: any) => void,
-    message: Message
-  ): void {
+  private sendMessageAndPromiseToRespond<T>(message: Message): Promise<T> {
+    const { sandbox } = this;
     const uid: string = uuid.v4();
-    this.promiseResolvers[uid] = {
-      resolve,
-      reject,
-    };
-    sendMessage(this.sandbox, {
-      ...message,
-      // With this we'll know to whom it goes
-      uid: uid,
-    });
+    return new Promise<T>(
+      (resolve: (address: T) => void, reject: (error: any) => void): void => {
+        // Create a promise resolver that waits for responses
+        // to this message
+        //
+        // TODO: we probably need a way to ensure that this happened and moreover
+        //       make 100% sure that the promise was fulfilled
+        this.resolvers[uid] = {
+          resolve,
+          reject,
+        };
+        sendMessage(sandbox.contentWindow, {
+          ...message,
+          // With this we'll know to whom it goes
+          uid: uid,
+        });
+      }
+    );
   }
 
   /**
@@ -199,15 +241,13 @@ export class Signer {
     // message that is sent
     window.addEventListener("message", this.createMessageListener());
     // Create the signer window
-    const iframe = createSandboxedIframe(content);
-    this.sandbox = iframe.contentWindow;
+    this.sandbox = createSandboxedIframe(content);
     this.config = application;
     // Return a "cleanup" function to remove the listener and avoid leaks
     return () => {
-      const parent: HTMLElement = iframe.parentElement;
-      if (parent !== null) {
-        parent.removeChild(iframe);
-      }
+      const { body } = document;
+      // Remove the iframe from the body of the document
+      body.removeChild(this.sandbox);
       // Remove listeners
       window.removeEventListener("message", this.createMessageListener());
     };
@@ -242,7 +282,8 @@ export class Signer {
    * This methods should be used to close Google's session
    */
   public signOut(): void {
-    sendMessage(this.sandbox, {
+    const { sandbox } = this;
+    sendMessage(sandbox.contentWindow, {
       target: "Custodian",
       type: "SignOut",
     });
@@ -251,11 +292,12 @@ export class Signer {
   /**
    * Creates a new key for this user and saves it in GDrive
    */
-  public createAndStoreKey(
+  public async createAndStoreKey(
     hdPath: string = "m/44'/234'/0'/0/0",
     prefix: string = "star"
-  ): void {
-    sendMessage(this.sandbox, {
+  ): Promise<void> {
+    const { sandbox } = this;
+    return this.sendMessageAndPromiseToRespond({
       target: "Signer",
       type: "CreateAccount",
       data: {
@@ -266,16 +308,24 @@ export class Signer {
   }
 
   public async getAddress(): Promise<string> {
-    return new Promise(
-      (
-        resolve: (address: string) => void,
-        reject: (error: any) => void
-      ): void => {
-        this.sendMessageWithResolver(resolve, reject, {
-          target: "Signer",
-          type: "GetAddress",
-        });
-      }
-    );
+    return this.sendMessageAndPromiseToRespond<string>({
+      target: "Signer",
+      type: "GetAddress",
+    });
+  }
+
+  public async signTx(tx: any): Promise<any> {
+    return this.sendMessageAndPromiseToRespond<any>({
+      target: "Signer",
+      type: "SignTx",
+      data: tx,
+    });
+  }
+
+  public async deleteAccount(): Promise<void> {
+    return this.sendMessageAndPromiseToRespond({
+      target: "Custodian",
+      type: "DeleteAccount",
+    });
   }
 }

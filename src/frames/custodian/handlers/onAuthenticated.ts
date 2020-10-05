@@ -6,7 +6,9 @@ export const onAuthenticated = async (
   accessToken: GoogleAccessToken
 ): Promise<Message | null> => {
   try {
-    const mnemonic: string = await GDriveApi.readMnemonic(accessToken);
+    const mnemonic: string = await GDriveApi.readMnemonic();
+    // We succeeded, so set the token
+    window.accessToken = accessToken;
     return {
       target: "Signer",
       type: "Initialize",

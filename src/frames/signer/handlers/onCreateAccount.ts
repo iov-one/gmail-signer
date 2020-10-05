@@ -8,7 +8,7 @@ export const onCreateAccount = async (
   prefix: string
 ): Promise<Message> => {
   const wallet: Secp256k1Wallet = await Secp256k1Wallet.generate(
-    24,
+    12,
     parseHDPath(hdPath),
     prefix
   );

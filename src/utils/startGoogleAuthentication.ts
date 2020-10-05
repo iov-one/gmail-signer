@@ -1,6 +1,6 @@
 import redirectPage from "../templates/google-redirection-page.html";
-import { GoogleAccessToken } from "../types/googleAccessToken";
 import { Application } from "../types/application";
+import { GoogleAccessToken } from "../types/googleAccessToken";
 import {
   GoogleOAuthError,
   isGoogleOAuthError,
@@ -8,8 +8,6 @@ import {
 import { extractAccessTokeFromUrl } from "./extractAccessTokeFromUrl";
 import { toQueryString, toWindowOptions } from "./helpers";
 import { sendMessage } from "./sendMessage";
-
-import { v4 as uuid } from "uuid";
 
 const GOOGLE_REDIRECT_URI = "/gdrive-signer/on-auth-result";
 
@@ -32,7 +30,7 @@ document.addEventListener("DOMContentLoaded", (): void => {
   // This means that we are in the authentication window
   if (pathname === GOOGLE_REDIRECT_URI) {
     // Replace content of the document with a more approriate one, and
-    // specially, prevent the scripts from running in this window
+    // specially, prevent the frames from running in this window
     document.open();
     document.write(redirectPage);
     document.close();
@@ -65,7 +63,8 @@ export const startGoogleAuthentication = (configuration: Application): void => {
     // and extract the code to ask for the token
     redirect_uri: toValidUrl(location.href, GOOGLE_REDIRECT_URI),
   });
-  const size = 530;
+  const width = 530;
+  const height = 639;
   // We don't use the response
   window.open(
     `https://accounts.google.com/o/oauth2/v2/auth?${queryString}`,
@@ -75,10 +74,10 @@ export const startGoogleAuthentication = (configuration: Application): void => {
       location: "no",
       resizeable: "no",
       status: "no",
-      left: (screen.width - size) / 2,
-      width: size,
-      top: (screen.height - size) / 2,
-      height: size,
+      left: (screen.width - width) / 2,
+      width: width,
+      top: (screen.height - height) / 2,
+      height: height,
     })
   );
 };
