@@ -1,2 +1,2 @@
-export { Signer, Events, ReadyState } from "./signer";
+export { Signer, Events, SignerState } from "./signer";
 export { Application } from "./types/application";

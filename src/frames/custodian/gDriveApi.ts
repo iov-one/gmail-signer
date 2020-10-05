@@ -17,8 +17,10 @@ export namespace GDriveApi {
 
   /**
    * Custom special error for not-found situation
+   *
+   * @private
    */
-  export const NotFoundError: CommonError = {
+  const NotFoundError: CommonError = {
     message: "mnemonic not found for this account",
   };
 

@@ -50,10 +50,9 @@ window.onmessage = createMessageCallback(onMessage);
 // Entry point for the signer
 window.onload = (): void => {
   window.wallet = new Wallet();
-  // Let the root window know that I can start reading messages :)
   sendMessage(parent, {
     target: "Root",
-    type: "Ready",
+    type: "Sandboxed",
     data: undefined,
   });
 };

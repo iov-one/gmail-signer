@@ -1,6 +1,7 @@
 import * as uuid from "uuid";
+import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "./constants";
 import { onAccessTokenReceived } from "./events/onAccessTokenReceived";
-import { onCustodianReady } from "./events/onCustodianReady";
+import { tryToAuthenticateWithSavedToken } from "./events/tryToAuthenticateWithSavedToken";
 import content from "./templates/custodian.html";
 import { Application } from "./types/application";
 import { CommonError } from "./types/commonError";
@@ -12,17 +13,17 @@ import { startGoogleAuthentication } from "./utils/startGoogleAuthentication";
 
 type EventHandler = (...args: any[]) => void;
 
-export enum ReadyState {
+export enum SignerState {
   Loading,
-  Ready,
+  Sandboxed,
   Authenticated,
   SignedOut,
-  SignedIn,
+  SignerReady,
   NeedsToCreateMnemonic,
 }
 
 export enum Events {
-  ReadyStateChange = "readystatechange",
+  StateChange = "statechange",
 }
 
 interface PromiseResolver {
@@ -37,12 +38,12 @@ export class Signer {
   private eventHandlers: {
     [event in Events]: (...args: any) => any;
   } = {
-    [Events.ReadyStateChange]: undefined,
+    [Events.StateChange]: undefined,
   };
 
-  private setReadyState(readyState: ReadyState): void {
-    const handler: (readyState: ReadyState, data?: any) => void = this
-      .eventHandlers[Events.ReadyStateChange];
+  private setState(readyState: SignerState): void {
+    const handler: (readyState: SignerState, data?: any) => void = this
+      .eventHandlers[Events.StateChange];
     if (handler !== undefined) {
       // Call the handler for it
       handler(readyState, undefined);
@@ -75,12 +76,15 @@ export class Signer {
       throw new Error("this type of message should never reach this window");
     } else {
       switch (message.type) {
-        case "Ready":
-          this.setReadyState(ReadyState.Ready);
+        case "Sandboxed":
+          this.setState(SignerState.Sandboxed);
           // Try to auto-authenticate
-          return onCustodianReady(sandbox.contentWindow);
+          if (await tryToAuthenticateWithSavedToken(sandbox.contentWindow)) {
+            this.setState(SignerState.Authenticated);
+          }
+          break;
         case "Authenticated":
-          this.setReadyState(ReadyState.Authenticated);
+          this.setState(SignerState.Authenticated);
           return onAccessTokenReceived(sandbox.contentWindow, message.data);
         case "ShowModal":
           this.showSandbox();
@@ -89,17 +93,17 @@ export class Signer {
           this.hideSandbox();
           break;
         case "SignerReady":
-          this.setReadyState(ReadyState.SignedIn);
+          this.setState(SignerState.SignerReady);
           break;
         case "SendSignedTx":
           this.forwardMessageToPromiseResolver(message);
           break;
         case "RequestMnemonicCreation":
-          this.setReadyState(ReadyState.NeedsToCreateMnemonic);
+          this.setState(SignerState.NeedsToCreateMnemonic);
           this.forwardMessageToPromiseResolver(message);
           break;
         case "SignedOut":
-          this.setReadyState(ReadyState.SignedOut);
+          this.setState(SignerState.SignedOut);
           break;
         case "SendAddress":
           this.forwardMessageToPromiseResolver(message);
@@ -235,7 +239,7 @@ export class Signer {
    * @param application Google's configuration for OAuth
    */
   public connect(application: Application): () => void {
-    this.setReadyState(ReadyState.Loading);
+    this.setState(SignerState.Loading);
     // Listen to messages from the iframes before creating
     // them, because the existence of one of them is the first
     // message that is sent
@@ -279,11 +283,22 @@ export class Signer {
   }
 
   /**
+   * This method is used to revoke all permissions given to the signer
+   */
+  public abandon(): Promise<void> {
+    localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
+    return this.sendMessageAndPromiseToRespond({
+      target: "Custodian",
+      type: "Abandon",
+    });
+  }
+
+  /**
    * This methods should be used to close Google's session
    */
-  public signOut(): void {
-    const { sandbox } = this;
-    sendMessage(sandbox.contentWindow, {
+  public signOut(): Promise<void> {
+    localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
+    return this.sendMessageAndPromiseToRespond({
       target: "Custodian",
       type: "SignOut",
     });
@@ -296,7 +311,6 @@ export class Signer {
     hdPath: string = "m/44'/234'/0'/0/0",
     prefix: string = "star"
   ): Promise<void> {
-    const { sandbox } = this;
     return this.sendMessageAndPromiseToRespond({
       target: "Signer",
       type: "CreateAccount",

@@ -4,6 +4,7 @@ import { Message } from "../types/message";
 import { createMessageCallback } from "../utils/createMessageCallback";
 import { createSandboxedIframe } from "../utils/createSandboxedIframe";
 import { sendMessage } from "../utils/sendMessage";
+import { onAbandon } from "./custodian/handlers/onAbandon";
 import { onAuthenticated } from "./custodian/handlers/onAuthenticated";
 import { onDeleteAccount } from "./custodian/handlers/onDeleteAccount";
 import { onSaveMnemonic } from "./custodian/handlers/onSaveMnemonic";
@@ -31,7 +32,8 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
   const { data } = message;
   switch (message.type) {
     case "Authenticated":
-      return onAuthenticated(data);
+      window.accessToken = data;
+      return onAuthenticated();
     case "ShowModal":
       showSandbox();
       // Propagate to the parent
@@ -52,6 +54,8 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
       return onDeleteAccount();
     case "SignOut":
       return onSignOut();
+    case "Abandon":
+      return onAbandon();
     case "SaveMnemonic":
       return onSaveMnemonic(data);
     default:
