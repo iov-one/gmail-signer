@@ -19,7 +19,14 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
     case "Initialize":
       return onInitialize(data);
     case "SignTx":
-      return onSignTx(data);
+      return onSignTx(
+        data.messages, 
+        data.fee, 
+        data.chainId,
+        data.memo, 
+        data.accountNumber, 
+        data.sequence
+      );
     case "GetAddress":
       return onGetAddress();
     case "CreateAccount":

@@ -1,3 +1,6 @@
+import { GoogleAccessToken } from "./types/googleAccessToken";
+import { GoogleOAuthError, isGoogleOAuthError } from "./types/googleOAuthError";
+import { extractAccessTokeFromUrl } from "./utils/extractAccessTokeFromUrl";
 import * as uuid from "uuid";
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "./constants";
 import { onAccessTokenReceived } from "./events/onAccessTokenReceived";
@@ -10,6 +13,7 @@ import { createMessageCallback } from "./utils/createMessageCallback";
 import { createSandboxedIframe } from "./utils/createSandboxedIframe";
 import { sendMessage } from "./utils/sendMessage";
 import { startGoogleAuthentication } from "./utils/startGoogleAuthentication";
+import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 
 type EventHandler = (...args: any[]) => void;
 
@@ -78,10 +82,6 @@ export class Signer {
       switch (message.type) {
         case "Sandboxed":
           this.setState(SignerState.Sandboxed);
-          // Try to auto-authenticate
-          if (await tryToAuthenticateWithSavedToken(sandbox.contentWindow)) {
-            this.setState(SignerState.Authenticated);
-          }
           break;
         case "Authenticated":
           this.setState(SignerState.Authenticated);
@@ -151,20 +151,26 @@ export class Signer {
   /**
    * Start the google authentication flow
    */
-  public signIn = (): void => {
-    const configuration: Application | null = this.config;
-    if (configuration === null) {
-      throw new Error(
-        "cannot access google's configuration, so cannot create the authentication modal"
-      );
-    }
-    if (this.sandbox === null) {
-      throw new Error(
-        "cannot send messages to the iframe, it was not created yet"
-      );
+  public signIn = async (): Promise<void> => {
+    const { sandbox } = this;
+    // Try to auto-authenticate
+    if (await tryToAuthenticateWithSavedToken(sandbox.contentWindow)) {
+      this.setState(SignerState.Authenticated);
     } else {
-      // The user has decided to authenticate, so let's do that
-      startGoogleAuthentication(configuration);
+      const configuration: Application | null = this.config;
+      if (configuration === null) {
+        throw new Error(
+          "cannot access google's configuration, so cannot create the authentication modal"
+        );
+      }
+      if (this.sandbox === null) {
+        throw new Error(
+          "cannot send messages to the iframe, it was not created yet"
+        );
+      } else {
+        // The user has decided to authenticate, so let's do that
+        return startGoogleAuthentication(configuration);
+      }
     }
   };
 
@@ -282,6 +288,25 @@ export class Signer {
     }
   }
 
+  public static tryToExtractAccessToken(window: Window): boolean {
+    const { pathname } = window.location;
+    const accessTokenOrError:
+      | GoogleAccessToken
+      | GoogleOAuthError = extractAccessTokeFromUrl(window.location);
+    if (!isGoogleOAuthError(accessTokenOrError)) {
+      const { opener } = window;
+      // Send back the result
+      sendMessage(opener, {
+        target: "Root",
+        type: "Authenticated",
+        data: accessTokenOrError,
+      });
+      // Close me
+      window.close();
+      return true;
+    }
+  }
+
   /**
    * This method is used to revoke all permissions given to the signer
    */
@@ -328,11 +353,25 @@ export class Signer {
     });
   }
 
-  public async signTx(tx: any): Promise<any> {
-    return this.sendMessageAndPromiseToRespond<any>({
+  public async sign(
+    messages: Msg[],
+    fee: StdFee,
+    chainId: string,
+    memo = "",
+    accountNumber: string,
+    sequence: string
+  ): Promise<StdSignature> {
+    return this.sendMessageAndPromiseToRespond<StdSignature>({
       target: "Signer",
       type: "SignTx",
-      data: tx,
+      data: {
+        messages: messages,
+        fee: fee,
+        chainId: chainId,
+        memo: memo,
+        accountNumber: accountNumber,
+        sequence: sequence,
+      },
     });
   }
 

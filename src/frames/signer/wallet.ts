@@ -3,7 +3,8 @@ import {
   makeSignBytes,
   Secp256k1Wallet,
   StdSignature,
-  StdTx,
+  Msg,
+  StdFee
 } from "@cosmjs/launchpad";
 import { parseHDPath } from "./parseHDPath";
 
@@ -35,16 +36,20 @@ export class Wallet {
     return accounts[0].address;
   }
 
-  public async signTx(tx: StdTx): Promise<StdTx> {
+  public async sign(
+    messages: Msg[], 
+    fee: StdFee, 
+    chainId: string, 
+    memo: string, 
+    accountNumber: number, 
+    sequence: number
+): Promise<StdSignature> {
     const { wallet } = this;
-    const signBytes = makeSignBytes(tx.msg, tx.fee, "", tx.memo, 1, 1);
+    const signBytes = makeSignBytes(messages, fee, chainId, memo, accountNumber, sequence);
     const signature: StdSignature = await wallet.sign(
       await this.getAddress(),
       signBytes
     );
-    return {
-      ...tx,
-      signatures: [signature],
-    };
+    return signature;
   }
 }
