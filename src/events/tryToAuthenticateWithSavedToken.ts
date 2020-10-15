@@ -1,16 +1,13 @@
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "../constants";
 import { GoogleAccessToken } from "../types/googleAccessToken";
-import { onAccessTokenReceived } from "./onAccessTokenReceived";
 
-const isAccessTokenValid = async (
+const isAccessTokeExpired = async (
   accessToken: GoogleAccessToken
 ): Promise<boolean> => {
-  return true;
+  return accessToken.expiresAt < Date.now();
 };
 
-export const tryToAuthenticateWithSavedToken = async (
-  signerWindow: Window
-): Promise<boolean> => {
+export const tryToAuthenticateWithSavedToken = async (): Promise<GoogleAccessToken | null> => {
   await new Promise((resolve: () => void): void => {
     setTimeout(resolve, 3000);
   });
@@ -28,20 +25,15 @@ export const tryToAuthenticateWithSavedToken = async (
     try {
       const accessToken: GoogleAccessToken = JSON.parse(savedToken);
       // We also must confirm that it is not expired
-      if (
-        accessToken.expiresAt < Date.now() &&
-        (await isAccessTokenValid(accessToken))
-      ) {
+      if (await isAccessTokeExpired(accessToken)) {
         // Token has expired
         localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
       } else {
-        // Use saved token
-        onAccessTokenReceived(signerWindow, accessToken);
-        return true;
+        return accessToken;
       }
     } catch {
-      return false;
+      return null;
     }
   }
-  return false;
+  return null;
 };

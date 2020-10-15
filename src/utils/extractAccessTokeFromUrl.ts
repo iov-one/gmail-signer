@@ -42,5 +42,9 @@ export const extractAccessTokeFromUrl = (
       token: result.access_token,
       type: "Bearer",
     };
+  } else {
+    throw new Error(
+      "redirected to the correct URL but cannot extract from it the needed data"
+    );
   }
 };
