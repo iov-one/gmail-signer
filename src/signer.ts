@@ -1,6 +1,4 @@
-import { GoogleAccessToken } from "./types/googleAccessToken";
-import { GoogleOAuthError, isGoogleOAuthError } from "./types/googleOAuthError";
-import { extractAccessTokeFromUrl } from "./utils/extractAccessTokeFromUrl";
+import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 import * as uuid from "uuid";
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "./constants";
 import { onAccessTokenReceived } from "./events/onAccessTokenReceived";
@@ -8,12 +6,12 @@ import { tryToAuthenticateWithSavedToken } from "./events/tryToAuthenticateWithS
 import content from "./templates/custodian.html";
 import { Application } from "./types/application";
 import { CommonError } from "./types/commonError";
+import { GoogleAccessToken } from "./types/googleAccessToken";
 import { Message } from "./types/message";
 import { createMessageCallback } from "./utils/createMessageCallback";
 import { createSandboxedIframe } from "./utils/createSandboxedIframe";
 import { sendMessage } from "./utils/sendMessage";
 import { startGoogleAuthentication } from "./utils/startGoogleAuthentication";
-import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 
 type EventHandler = (...args: any[]) => void;
 
@@ -21,9 +19,19 @@ export enum SignerState {
   Loading,
   Sandboxed,
   Authenticated,
+  PreparingSigner,
   SignedOut,
   SignerReady,
-  NeedsToCreateMnemonic,
+}
+
+export interface SignerConfig {
+  readonly mnemonic: {
+    readonly path: string;
+    readonly elementId: string;
+  };
+  readonly permission: {
+    readonly path: string;
+  };
 }
 
 export enum Events {
@@ -36,8 +44,9 @@ interface PromiseResolver {
 }
 
 export class Signer {
+  private readonly signerConfig: SignerConfig;
   private sandbox: HTMLIFrameElement = null;
-  private config: Application | null = null;
+  private googleConfig: Application | null = null;
   private resolvers: { [id: string]: PromiseResolver } = {};
   private eventHandlers: {
     [event in Events]: (...args: any) => any;
@@ -45,25 +54,24 @@ export class Signer {
     [Events.StateChange]: undefined,
   };
 
-  private setState(readyState: SignerState): void {
+  constructor(config: SignerConfig) {
+    this.signerConfig = config;
+  }
+
+  /**
+   * Replaces current state and allows the UI to react upon the change
+   *
+   * @param state The new state that will replace the old
+   *
+   * @private
+   */
+  private setState(state: SignerState): void {
     const handler: (readyState: SignerState, data?: any) => void = this
       .eventHandlers[Events.StateChange];
     if (handler !== undefined) {
       // Call the handler for it
-      handler(readyState, undefined);
+      handler(state, undefined);
     }
-  }
-
-  private showSandbox(): void {
-    const { style } = this.sandbox;
-    // Set visible for a moment
-    style.display = "initial";
-  }
-
-  private hideSandbox(): void {
-    const { style } = this.sandbox;
-    // Set visible for a moment
-    style.display = "none";
   }
 
   /**
@@ -84,22 +92,11 @@ export class Signer {
           this.setState(SignerState.Sandboxed);
           break;
         case "Authenticated":
-          this.setState(SignerState.Authenticated);
           return onAccessTokenReceived(sandbox.contentWindow, message.data);
-        case "ShowModal":
-          this.showSandbox();
-          break;
-        case "ModalDismissed":
-          this.hideSandbox();
-          break;
         case "SignerReady":
           this.setState(SignerState.SignerReady);
           break;
         case "SendSignedTx":
-          this.forwardMessageToPromiseResolver(message);
-          break;
-        case "RequestMnemonicCreation":
-          this.setState(SignerState.NeedsToCreateMnemonic);
           this.forwardMessageToPromiseResolver(message);
           break;
         case "SignedOut":
@@ -149,31 +146,36 @@ export class Signer {
   }
 
   /**
-   * Start the google authentication flow
+   * Initialize the wallet from the newly/saved access token that we just got
+   *
+   * @param accessToken The access token that we are going to use for authenticating gdrive calls
+   *
+   * @private
    */
-  public signIn = async (): Promise<void> => {
-    const { sandbox } = this;
-    // Try to auto-authenticate
-    if (await tryToAuthenticateWithSavedToken(sandbox.contentWindow)) {
-      this.setState(SignerState.Authenticated);
-    } else {
-      const configuration: Application | null = this.config;
-      if (configuration === null) {
-        throw new Error(
-          "cannot access google's configuration, so cannot create the authentication modal"
-        );
-      }
-      if (this.sandbox === null) {
-        throw new Error(
-          "cannot send messages to the iframe, it was not created yet"
-        );
-      } else {
-        // The user has decided to authenticate, so let's do that
-        return startGoogleAuthentication(configuration);
-      }
-    }
-  };
+  private initializeWallet(accessToken: GoogleAccessToken): Promise<void> {
+    this.setState(SignerState.PreparingSigner);
+    // Save it for later use
+    localStorage.setItem(
+      GOOGLE_ACCESS_TOKEN_STORAGE_PATH,
+      JSON.stringify(accessToken)
+    );
+    // Generate the message-promise
+    return this.sendMessageAndPromiseToRespond({
+      target: "Custodian",
+      type: "Authenticated",
+      data: accessToken,
+    });
+  }
 
+  /**
+   * Returns a promise resolver for a given uid if there exists one. These resolvers are only created
+   * when calling `sendMessageAndPromiseToRespond`
+   *
+   * @param uuid The id of the message that will be resolved to a promise as soon as the response arrives,
+   *             or an error occurs
+   *
+   * @private
+   */
   private getResolver(uuid: string): PromiseResolver | undefined {
     if (uuid in this.resolvers) {
       const resolver: PromiseResolver = this.resolvers[uuid];
@@ -193,7 +195,10 @@ export class Signer {
   private forwardMessageToPromiseResolver(message: Message): void {
     const { uid } = message;
     if (uid === undefined) {
-      console.warn("received message that requires a resolver but has no uid");
+      console.warn(
+        "received a message that requires a resolver but has no uid",
+        message
+      );
     } else {
       const resolver: PromiseResolver | undefined = this.getResolver(uid);
       if (resolver === undefined) {
@@ -239,6 +244,40 @@ export class Signer {
   }
 
   /**
+   * Sign-in using google and gain access to GDrive
+   */
+  public signIn = async (): Promise<void> => {
+    // Try to auto-authenticate
+    const savedToken: GoogleAccessToken | null = await tryToAuthenticateWithSavedToken();
+    // If we had a token already, let's use it. This is smart enough to return `null'
+    // if the token has expired
+    if (savedToken !== null) {
+      // FIXME: we need to refresh the token, right?
+      this.setState(SignerState.Authenticated);
+      // We should probably send a message here no?
+      await this.initializeWallet(savedToken);
+    } else {
+      // If we got here, then the user needs to authenticate, that includes possibly
+      // give the application access to GDrive
+      const configuration: Application | null = this.googleConfig;
+      if (configuration === null) {
+        throw new Error(
+          "cannot access google's configuration, so cannot create the authentication modal"
+        );
+      }
+      // Start a new promise that will take the user through the
+      // google authentication flow
+      const newToken: GoogleAccessToken = await startGoogleAuthentication(
+        configuration
+      );
+      // Means we were successful
+      this.setState(SignerState.Authenticated);
+      // We should probably send a message here no?
+      await this.initializeWallet(newToken);
+    }
+  };
+
+  /**
    * This function initializes the whole flow that allows the user to authenticate with
    * Google and authorize the library to securely manage their mnemonic string
    *
@@ -246,20 +285,23 @@ export class Signer {
    */
   public connect(application: Application): () => void {
     this.setState(SignerState.Loading);
+    const onMessage = this.createMessageListener();
     // Listen to messages from the iframes before creating
     // them, because the existence of one of them is the first
     // message that is sent
-    window.addEventListener("message", this.createMessageListener());
+    window.addEventListener("message", onMessage);
     // Create the signer window
-    this.sandbox = createSandboxedIframe(content);
-    this.config = application;
+    this.sandbox = createSandboxedIframe(content, this.signerConfig);
+    this.googleConfig = application;
     // Return a "cleanup" function to remove the listener and avoid leaks
     return () => {
-      const { body } = document;
-      // Remove the iframe from the body of the document
-      body.removeChild(this.sandbox);
+      const { parentNode: parent } = this.sandbox;
+      if (parent !== null) {
+        // Remove the iframe from the body of the document
+        parent.removeChild(this.sandbox);
+      }
       // Remove listeners
-      window.removeEventListener("message", this.createMessageListener());
+      window.removeEventListener("message", onMessage);
     };
   }
 
@@ -288,25 +330,6 @@ export class Signer {
     }
   }
 
-  public static tryToExtractAccessToken(window: Window): boolean {
-    const { pathname } = window.location;
-    const accessTokenOrError:
-      | GoogleAccessToken
-      | GoogleOAuthError = extractAccessTokeFromUrl(window.location);
-    if (!isGoogleOAuthError(accessTokenOrError)) {
-      const { opener } = window;
-      // Send back the result
-      sendMessage(opener, {
-        target: "Root",
-        type: "Authenticated",
-        data: accessTokenOrError,
-      });
-      // Close me
-      window.close();
-      return true;
-    }
-  }
-
   /**
    * This method is used to revoke all permissions given to the signer
    */
@@ -329,23 +352,6 @@ export class Signer {
     });
   }
 
-  /**
-   * Creates a new key for this user and saves it in GDrive
-   */
-  public async createAndStoreKey(
-    hdPath: string = "m/44'/234'/0'/0/0",
-    prefix: string = "star"
-  ): Promise<void> {
-    return this.sendMessageAndPromiseToRespond({
-      target: "Signer",
-      type: "CreateAccount",
-      data: {
-        hdPath,
-        prefix,
-      },
-    });
-  }
-
   public async getAddress(): Promise<string> {
     return this.sendMessageAndPromiseToRespond<string>({
       target: "Signer",
@@ -353,11 +359,21 @@ export class Signer {
     });
   }
 
+  /**
+   * Sign given set of messages
+   *
+   * @param messages The messages that the caller wants to sign
+   * @param fee The fee of the transaction
+   * @param chainId The chain id
+   * @param memo The memo string (can be omitted)
+   * @param accountNumber The account number (FIXME: it should be possible to compute this actually)
+   * @param sequence The sequence number (FIXME: it should be also possible to compute this too)
+   */
   public async sign(
     messages: Msg[],
     fee: StdFee,
     chainId: string,
-    memo = "",
+    memo: string,
     accountNumber: string,
     sequence: string
   ): Promise<StdSignature> {
@@ -375,6 +391,9 @@ export class Signer {
     });
   }
 
+  /**
+   * Delete an existing account
+   */
   public async deleteAccount(): Promise<void> {
     return this.sendMessageAndPromiseToRespond({
       target: "Custodian",

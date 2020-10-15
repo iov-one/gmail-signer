@@ -20,7 +20,7 @@ export namespace GDriveApi {
    *
    * @private
    */
-  const NotFoundError: CommonError = {
+  export const NotFoundError: CommonError = {
     message: "mnemonic not found for this account",
   };
 
@@ -109,8 +109,9 @@ export namespace GDriveApi {
         } else if (isMnemonicData(files[0])) {
           const { appProperties } = files[0];
           return appProperties.mnemonic;
+        } else {
+          throw NotFoundError;
         }
-        break;
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());

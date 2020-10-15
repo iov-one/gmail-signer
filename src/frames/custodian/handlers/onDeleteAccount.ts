@@ -5,6 +5,6 @@ export const onDeleteAccount = async (): Promise<Message> => {
   await GDriveApi.deleteMnemonic();
   return {
     target: "Root",
-    type: "RequestMnemonicCreation",
+    type: "AccountDeleted",
   };
 };

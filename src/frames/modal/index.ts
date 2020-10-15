@@ -1,81 +1,106 @@
-import { cssToString } from "../../utils/css";
-import { sendMessage } from "../../utils/sendMessage";
-import { compileTemplate } from "./compileTemplate";
-import { createButton } from "./createButton";
-import { Events } from "./events";
-import {
-  ButtonBoxStyle,
-  ModalContainerStyle,
-  ModalContentStyle,
-} from "./styles";
+import { ModalEvents } from "../../types/modalEvents";
+import { toWindowOptions } from "../../utils/helpers";
+import { resizeToFit } from "../../utils/resizeToFit";
+import { setWindowCloseHandler } from "../../utils/setWindowCloseHandler";
+
+type GenericCallback = (...args: any[]) => void;
 
 export class Modal {
-  private readonly element: HTMLElement;
+  private popup: Window | null;
 
-  public constructor() {
-    this.element = document.createElement("div");
+  private handlers: { [event in ModalEvents]: GenericCallback | undefined } = {
+    [ModalEvents.Rejected]: undefined,
+    [ModalEvents.Loaded]: undefined,
+    [ModalEvents.Accepted]: undefined,
+  };
+
+  private invokeHandler(event: ModalEvents, ...args: any[]): void {
+    const handler: GenericCallback | undefined = this.handlers[event];
+    if (handler !== undefined) {
+      handler(...args);
+    }
   }
 
-  public open(): void {
-    const { body } = document;
-    body.appendChild(this.element);
-    // Modals inside iframes need the iframe itself to be visible
-    // inside the parent window, for which we send this message and
-    // hope the parent window does allow the modal to show
-    sendMessage(parent, {
-      target: "Root",
-      type: "ShowModal",
+  private loadHandler = (): void => {
+    const { popup } = this;
+    const { document } = popup;
+    // Install button handlers
+    const accept: HTMLElement | null = document.querySelector(
+      "[data-button='accept']"
+    );
+    const reject: HTMLElement | null = document.querySelector(
+      "[data-button='reject']"
+    );
+    if (accept === null || reject === null) {
+      throw new Error(
+        "content is expected to have 2 buttons one with the `data-button' attribute set to" +
+          ' "accept" and the other to "reject"'
+      );
+    }
+    accept.onclick = (): void => this.invokeHandler(ModalEvents.Accepted);
+    reject.onclick = (): void => this.invokeHandler(ModalEvents.Rejected);
+    // In case the caller wants to do something, let's allow them
+    this.invokeHandler(ModalEvents.Loaded, document);
+    // Wait until the popup is fully "loaded" with
+    // the new items created in it!
+    popup.setTimeout((): void => {
+      // Now resize it as to fit it's contents
+      resizeToFit(popup);
+    }, 0);
+  };
+
+  public open(path: string, name = "", width = 1, height = 1): void {
+    const popup: Window = window.open(
+      path,
+      name,
+      toWindowOptions({
+        menubar: "no",
+        location: "no",
+        chrome: "yes",
+        dialog: "yes",
+        resizeable: "no",
+        status: "no",
+        left: (screen.width - width) / 2,
+        width: width,
+        top: (screen.height - height) / 2,
+        height: height,
+      })
+    );
+    if (popup === null) {
+      console.warn("this is crazy man!");
+      // FIXME: request permission from the user to show modals and go again
+      return;
+    }
+    this.popup = popup;
+    // For the load event, we want to setup a few things
+    popup.addEventListener("load", this.loadHandler);
+    // Watch the window to catch if the user closes it
+    setWindowCloseHandler(popup, (): void => {
+      // This is the same as "reject"
+      this.invokeHandler(ModalEvents.Rejected);
+      // Now call the "close" method
+      this.close();
     });
   }
 
   public close(): void {
-    const { body } = document;
-    // Now we must tell the parent window that we no longer want to show
-    // the modal
-    sendMessage(parent, {
-      target: "Root",
-      type: "ModalDismissed",
-    });
-    body.removeChild(this.element);
+    const { popup } = this;
+    // Close the window if it's not already closed
+    if (popup !== null && popup.closed === false) {
+      popup.removeEventListener("load", this.loadHandler);
+      popup.close();
+    }
+    // Release memory
+    this.popup = null;
+    // Just keep it clean ;)
+    this.handlers = {
+      [ModalEvents.Rejected]: undefined,
+      [ModalEvents.Loaded]: undefined,
+      [ModalEvents.Accepted]: undefined,
+    };
   }
 
-  public setContent(html: string, data?: any): void {
-    const container: HTMLElement = this.element;
-    // Style it
-    container.setAttribute("style", cssToString(ModalContainerStyle));
-    const content: HTMLElement = document.createElement("div");
-    // Write to it the html
-    content.innerHTML = compileTemplate(html, data);
-    content.setAttribute("style", cssToString(ModalContentStyle));
-    // Create buttons
-    const accept: HTMLInputElement = createButton(
-      "Accept",
-      (): void => {
-        container.dispatchEvent(new CustomEvent("accepted"));
-      },
-      true
-    );
-    const reject: HTMLInputElement = createButton("Reject", (): void => {
-      container.dispatchEvent(new CustomEvent("rejected"));
-    });
-    const box: HTMLDivElement = document.createElement("div");
-    // Insert buttons in the box
-    box.setAttribute("style", cssToString(ButtonBoxStyle));
-    box.appendChild(accept);
-    box.appendChild(reject);
-    // Insert the box in the content
-    content.appendChild(box);
-    // Append it to the container
-    container.appendChild(content);
-  }
-
-  public on(event: Events, handler: () => void) {
-    const { element } = this;
-    element.addEventListener(event, handler, true);
-  }
-
-  public off(event: Events, handler: () => void) {
-    const { element } = this;
-    element.removeEventListener(event, handler, true);
+  public on(event: ModalEvents, handler: (...args: any[]) => void) {
+    this.handlers[event] = handler;
   }
 }

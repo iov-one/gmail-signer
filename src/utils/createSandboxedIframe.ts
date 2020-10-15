@@ -1,3 +1,4 @@
+import { SignerConfig } from "../signer";
 import { cssToString } from "./css";
 
 const HiddenFrameStyle = {
@@ -12,7 +13,8 @@ const HiddenFrameStyle = {
 
 export const createSandboxedIframe = (
   content: any,
-  permissions: string[] = ["allow-scripts"]
+  config: SignerConfig,
+  permissions: string[] = ["allow-scripts", "allow-popups"]
 ): HTMLIFrameElement => {
   const { document } = window;
   const { body } = document;
@@ -23,6 +25,8 @@ export const createSandboxedIframe = (
   body.insertBefore(frame, body.firstElementChild);
   // Now set it's content to the specified
   const { contentWindow, contentDocument } = frame;
+  // Set global data
+  contentWindow.signerConfig = config;
   // Write the html
   contentDocument.open();
   contentDocument.write(content);

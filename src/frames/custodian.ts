@@ -1,3 +1,4 @@
+import { SignerConfig } from "../signer";
 import signer from "../templates/signer.html";
 import { GoogleAccessToken } from "../types/googleAccessToken";
 import { Message } from "../types/message";
@@ -7,7 +8,6 @@ import { sendMessage } from "../utils/sendMessage";
 import { onAbandon } from "./custodian/handlers/onAbandon";
 import { onAuthenticated } from "./custodian/handlers/onAuthenticated";
 import { onDeleteAccount } from "./custodian/handlers/onDeleteAccount";
-import { onSaveMnemonic } from "./custodian/handlers/onSaveMnemonic";
 import { onSignOut } from "./custodian/handlers/onSignOut";
 import { ChildContainer } from "./signer/childContainer";
 
@@ -16,48 +16,30 @@ const CHILD_CONTAINER: ChildContainer = new ChildContainer();
 declare global {
   interface Window {
     accessToken: GoogleAccessToken;
+    signerConfig: SignerConfig;
   }
 }
-
-const showSandbox = (): void => {
-  const { style } = CHILD_CONTAINER.child;
-  style.display = "initial";
-};
-const hideSandbox = (): void => {
-  const { style } = CHILD_CONTAINER.child;
-  style.display = "none";
-};
 
 const handleMessage = async (message: Message): Promise<Message | null> => {
   const { data } = message;
   switch (message.type) {
     case "Authenticated":
       window.accessToken = data;
-      return onAuthenticated();
-    case "ShowModal":
-      showSandbox();
-      // Propagate to the parent
-      sendMessage(parent, {
-        target: "Root",
-        type: "ShowModal",
-      });
-      break;
-    case "ModalDismissed":
-      hideSandbox();
-      // Propagate to the parent
-      sendMessage(parent, {
-        target: "Root",
-        type: "ShowModal",
-      });
-      break;
+      try {
+        return await onAuthenticated();
+      } catch (error: any) {
+        return {
+          target: "Root",
+          type: "Error",
+          data: error,
+        };
+      }
     case "DeleteAccount":
       return onDeleteAccount();
     case "SignOut":
       return onSignOut();
     case "Abandon":
       return onAbandon();
-    case "SaveMnemonic":
-      return onSaveMnemonic(data);
     default:
       console.warn("unknown message: " + message.type);
   }
@@ -108,10 +90,8 @@ const onMessage = async (message: Message): Promise<void> => {
       throw new Error("unknown message type cannot be handled");
   }
 };
-window.onmessage = createMessageCallback(onMessage);
 
-// Entry point for the custodian
+window.onmessage = createMessageCallback(onMessage);
 window.onload = (): void => {
-  // Assign this here and get subsequent access to it
-  CHILD_CONTAINER.child = createSandboxedIframe(signer);
+  CHILD_CONTAINER.child = createSandboxedIframe(signer, window.signerConfig);
 };

@@ -7,10 +7,7 @@ export const onAccessTokenReceived = (
   accessToken: GoogleAccessToken
 ): void => {
   // Save it if it's not saved or update it anyway
-  localStorage.setItem(
-    GOOGLE_ACCESS_TOKEN_STORAGE_PATH,
-    JSON.stringify(accessToken)
-  );
+
   if (signerWindow !== null) {
     sendMessage(signerWindow, {
       target: "Custodian",

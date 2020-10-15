@@ -1,4 +1,5 @@
-export enum Events {
+export enum ModalEvents {
   Accepted = "accepted",
   Rejected = "rejected",
+  Loaded = "loaded",
 }

@@ -1,7 +1,7 @@
+import { SignerConfig } from "../signer";
 import { Message } from "../types/message";
 import { createMessageCallback } from "../utils/createMessageCallback";
 import { sendMessage } from "../utils/sendMessage";
-import { onCreateAccount } from "./signer/handlers/onCreateAccount";
 import { onGetAddress } from "./signer/handlers/onGetAddress";
 import { onInitialize } from "./signer/handlers/onInitialize";
 import { onSignTx } from "./signer/handlers/onSignTx";
@@ -10,6 +10,7 @@ import { Wallet } from "./signer/wallet";
 declare global {
   interface Window {
     wallet: Wallet;
+    signerConfig: SignerConfig;
   }
 }
 
@@ -20,17 +21,15 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
       return onInitialize(data);
     case "SignTx":
       return onSignTx(
-        data.messages, 
-        data.fee, 
+        data.messages,
+        data.fee,
         data.chainId,
-        data.memo, 
-        data.accountNumber, 
+        data.memo,
+        data.accountNumber,
         data.sequence
       );
     case "GetAddress":
       return onGetAddress();
-    case "CreateAccount":
-      return onCreateAccount(data.hdPath, data.prefix);
     default:
       console.warn("unknown message: " + message.type);
   }
