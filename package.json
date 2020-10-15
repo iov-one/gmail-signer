@@ -1,6 +1,6 @@
 {
   "name": "@iov/gdrive-custodian",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "description": "This package safely stores a mnemonic used for transaction signing on a user's GDrive.",
   "main": "lib/index.js",
   "scripts": {
@@ -8,6 +8,13 @@
   },
   "author": "IOV SAS <admin@iov.one>",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iov-one/gmail-signer"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/uuid": "^8.3.0",
     "babel-loader": "^8.1.0",
