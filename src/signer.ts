@@ -29,8 +29,9 @@ export interface SignerConfig {
     readonly path: string;
     readonly elementId: string;
   };
-  readonly permission: {
+  readonly authorization: {
     readonly path: string;
+    readonly elementId: string;
   };
 }
 

@@ -20,14 +20,22 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
     case "Initialize":
       return onInitialize(data);
     case "SignTx":
-      return onSignTx(
-        data.messages,
-        data.fee,
-        data.chainId,
-        data.memo,
-        data.accountNumber,
-        data.sequence
-      );
+      try {
+        return await onSignTx(
+          data.messages,
+          data.fee,
+          data.chainId,
+          data.memo,
+          data.accountNumber,
+          data.sequence
+        );
+      } catch (error: any) {
+        return {
+          target: "Root",
+          type: "Error",
+          data: error,
+        };
+      }
     case "GetAddress":
       return onGetAddress();
     default:

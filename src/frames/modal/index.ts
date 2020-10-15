@@ -1,6 +1,5 @@
 import { ModalEvents } from "../../types/modalEvents";
 import { toWindowOptions } from "../../utils/helpers";
-import { resizeToFit } from "../../utils/resizeToFit";
 import { setWindowCloseHandler } from "../../utils/setWindowCloseHandler";
 
 type GenericCallback = (...args: any[]) => void;
@@ -37,15 +36,20 @@ export class Modal {
           ' "accept" and the other to "reject"'
       );
     }
-    accept.onclick = (): void => this.invokeHandler(ModalEvents.Accepted);
-    reject.onclick = (): void => this.invokeHandler(ModalEvents.Rejected);
+    accept.addEventListener("click", (): void =>
+      this.invokeHandler(ModalEvents.Accepted)
+    );
+    reject.addEventListener("click", (): void =>
+      this.invokeHandler(ModalEvents.Rejected)
+    );
     // In case the caller wants to do something, let's allow them
     this.invokeHandler(ModalEvents.Loaded, document);
     // Wait until the popup is fully "loaded" with
     // the new items created in it!
     popup.setTimeout((): void => {
+      // FIXME: we should put this back at some point
       // Now resize it as to fit it's contents
-      resizeToFit(popup);
+      // resizeToFit(popup);
     }, 0);
   };
 
