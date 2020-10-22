@@ -3,6 +3,19 @@ import { Message } from "../../../types/message";
 import { ModalEvents } from "../../../types/modalEvents";
 import { Modal } from "../../modal";
 
+const ONE_MILLION = 1000000;
+
+const getFeeValue = (fee: StdFee): string => {
+  if (fee.amount === undefined) return null;
+  const coin: Coin = fee.amount[0];
+  if (coin === undefined) return (0).toLocaleString();
+  const numeric = Number(coin.amount);
+  if (isNaN(numeric) === true || numeric === 0) return (0).toLocaleString();
+  const value: number = numeric / ONE_MILLION;
+  // Convert to appropriately formatted string
+  return value.toLocaleString();
+};
+
 export const onSignTx = async (
   messages: Msg[],
   fee: StdFee,
@@ -23,18 +36,14 @@ export const onSignTx = async (
     ): void => {
       modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
         const element: HTMLElement | null = document.getElementById(elementId);
-        console.log(element);
         if (element !== null) {
-          const coin: Coin = fee.amount[0];
+          const feeValue: string = getFeeValue(fee);
+
           const item: HTMLElement = element.querySelector(
             "span[data-key='fee']"
           );
           if (item !== null) {
-            item.appendChild(
-              document.createTextNode(
-                (Number(coin.amount) / 1000000).toLocaleString()
-              )
-            );
+            item.appendChild(document.createTextNode(feeValue));
           }
         }
       });
