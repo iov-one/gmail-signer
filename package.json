@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "build": "webpack",
-    "publish": "yarn build && npm publish"
+    "deploy": "yarn build && yarn publish"
   },
   "author": "IOV SAS <admin@iov.one>",
   "license": "Apache-2.0",
