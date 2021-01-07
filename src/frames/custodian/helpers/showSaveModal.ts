@@ -5,7 +5,7 @@ import { GDriveApi } from "../gDriveApi";
 
 export const showSaveModal = async (mnemonic: string): Promise<void> => {
   const {
-    mnemonic: { path, elementId },
+    mnemonic: { path },
   } = window.signerConfig;
   const modal = new Modal();
   // Wait for the result and resolve or reject the promise
@@ -14,8 +14,10 @@ export const showSaveModal = async (mnemonic: string): Promise<void> => {
       // On loaded event handler, this will set the mnemonic
       // in the user provided window content
       modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
-        const element: HTMLElement | null = document.getElementById(elementId);
-        if (element !== null) {
+        const elements: NodeListOf<HTMLElement> = document.querySelectorAll(
+          '[data-key="mnemonic"]',
+        );
+        elements.forEach((element: HTMLElement): void => {
           const words: ReadonlyArray<string> = mnemonic.split(/[ \t\n]+/);
           words.forEach((word: string): void => {
             const span: HTMLSpanElement = document.createElement("span");
@@ -25,25 +27,28 @@ export const showSaveModal = async (mnemonic: string): Promise<void> => {
             // Add the span element to the container
             element.appendChild(span);
           });
-        }
+        });
       });
       // On accepted event handler
-      modal.on(ModalEvents.Accepted, async function (): Promise<void> {
-        modal.close();
-        // This is a length operation, so please take your time
-        await GDriveApi.writeMnemonic(mnemonic);
-        // Resolve the promise as the user did accept the query
-        resolve();
-      });
+      modal.on(
+        ModalEvents.Accepted,
+        async (): Promise<void> => {
+          modal.close();
+          // This is a length operation, so please take your time
+          await GDriveApi.writeMnemonic(mnemonic);
+          // Resolve the promise as the user did accept the query
+          resolve();
+        },
+      );
       // On rejected event handler
-      modal.on(ModalEvents.Rejected, function (): void {
+      modal.on(ModalEvents.Rejected, (): void => {
         modal.close();
         reject({
-          message: "user rejected his new account",
+          message: "user rejected the new account",
         });
       });
       // Please open the modal window :)
       modal.open(path, "custodian::create-mnemonic", 600, 400);
-    }
+    },
   );
 };

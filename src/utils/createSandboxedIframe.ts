@@ -12,9 +12,9 @@ const HiddenFrameStyle = {
 };
 
 export const createSandboxedIframe = (
-  content: any,
+  content: string,
   config: SignerConfig,
-  permissions: string[] = ["allow-scripts", "allow-popups"]
+  permissions: string[] = ["allow-scripts", "allow-popups"],
 ): HTMLIFrameElement => {
   const { document } = window;
   const { body } = document;

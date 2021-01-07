@@ -56,7 +56,7 @@ export namespace GDriveApi {
         headers: {
           Authorization: `${accessToken.type} ${accessToken.token}`,
         },
-      }
+      },
     );
     switch (response.status) {
       case 200:
@@ -71,6 +71,19 @@ export namespace GDriveApi {
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());
+    }
+  };
+
+  const handleSuccess = async (response: Response): Promise<string> => {
+    const filesData: FilesData = await response.json();
+    const { files } = filesData;
+    if (files.length === 0) {
+      throw NotFoundError;
+    } else if (isMnemonicData(files[0])) {
+      const { appProperties } = files[0];
+      return appProperties.mnemonic;
+    } else {
+      throw NotFoundError;
     }
   };
 
@@ -98,20 +111,11 @@ export namespace GDriveApi {
         headers: {
           Authorization: `${accessToken.type} ${accessToken.token}`,
         },
-      }
+      },
     );
     switch (response.status) {
       case 200:
-        const filesData: FilesData = await response.json();
-        const { files } = filesData;
-        if (files.length === 0) {
-          throw NotFoundError;
-        } else if (isMnemonicData(files[0])) {
-          const { appProperties } = files[0];
-          return appProperties.mnemonic;
-        } else {
-          throw NotFoundError;
-        }
+        return handleSuccess(response);
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());
@@ -141,7 +145,7 @@ export namespace GDriveApi {
           },
           parents: ["appDataFolder"],
         }),
-      }
+      },
     );
     if (response.status !== 200) {
       throw googleErrorToCommonError(await response.json());
@@ -162,7 +166,7 @@ export namespace GDriveApi {
         headers: {
           Authorization: `${accessToken.type} ${accessToken.token}`,
         },
-      }
+      },
     );
     if (response.status !== 204) {
       throw googleErrorToCommonError(await response.json());
@@ -179,7 +183,7 @@ export namespace GDriveApi {
           Authorization: `${accessToken.type} ${accessToken.token}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-      }
+      },
     );
     if (response.status !== 200) {
       throw googleErrorToCommonError(await response.json());

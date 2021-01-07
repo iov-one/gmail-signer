@@ -9,7 +9,7 @@ import { toQueryString, toWindowOptions } from "./helpers";
 import { setWindowCloseHandler } from "./setWindowCloseHandler";
 
 export const startGoogleAuthentication = async (
-  configuration: Application
+  configuration: Application,
 ): Promise<GoogleAccessToken> => {
   const queryString: string = toQueryString({
     client_id: configuration.clientID,
@@ -37,7 +37,7 @@ export const startGoogleAuthentication = async (
       width: width,
       top: (screen.height - height) / 2,
       height: height,
-    })
+    }),
   );
   if (popup === null) {
     // FIXME: request permission from the user to show modals and go again
@@ -46,20 +46,20 @@ export const startGoogleAuthentication = async (
   return new Promise(
     (
       resolve: (accessToken: GoogleAccessToken) => void,
-      reject: (error?: GoogleOAuthError | Error) => void
+      reject: (error?: GoogleOAuthError | Error) => void,
     ): void => {
       const { redirectURI } = configuration;
       setWindowCloseHandler(popup, (location: Location | null): void => {
         if (location === null) {
           reject(
-            new Error("cannot get the google access token from this window")
+            new Error("cannot get the google access token from this window"),
           );
         }
         const { href } = location;
         if (href === undefined) {
-          return;
-        }
-        if (!href.startsWith(redirectURI)) {
+          // Seems to also mean that the user did nothing
+          reject(new Error("user cancelled authentication"));
+        } else if (!href.startsWith(redirectURI)) {
           // Means the user closed the modal before being redirected
           // by google
           reject(new Error("user cancelled authentication"));
@@ -74,6 +74,6 @@ export const startGoogleAuthentication = async (
           }
         }
       });
-    }
+    },
   );
 };

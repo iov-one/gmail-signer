@@ -1,5 +1,6 @@
 import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 import * as uuid from "uuid";
+
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "./constants";
 import { onAccessTokenReceived } from "./events/onAccessTokenReceived";
 import { tryToAuthenticateWithSavedToken } from "./events/tryToAuthenticateWithSavedToken";
@@ -27,11 +28,9 @@ export enum SignerState {
 export interface SignerConfig {
   readonly mnemonic: {
     readonly path: string;
-    readonly elementId: string;
   };
   readonly authorization: {
     readonly path: string;
-    readonly elementId: string;
   };
 }
 
@@ -158,7 +157,7 @@ export class Signer {
     // Save it for later use
     localStorage.setItem(
       GOOGLE_ACCESS_TOKEN_STORAGE_PATH,
-      JSON.stringify(accessToken)
+      JSON.stringify(accessToken),
     );
     // Generate the message-promise
     return this.sendMessageAndPromiseToRespond({
@@ -198,7 +197,7 @@ export class Signer {
     if (uid === undefined) {
       console.warn(
         "received a message that requires a resolver but has no uid",
-        message
+        message,
       );
     } else {
       const resolver: PromiseResolver | undefined = this.getResolver(uid);
@@ -240,7 +239,7 @@ export class Signer {
           // With this we'll know to whom it goes
           uid: uid,
         });
-      }
+      },
     );
   }
 
@@ -263,13 +262,13 @@ export class Signer {
       const configuration: Application | null = this.googleConfig;
       if (configuration === null) {
         throw new Error(
-          "cannot access google's configuration, so cannot create the authentication modal"
+          "cannot access google's configuration, so cannot create the authentication modal",
         );
       }
       // Start a new promise that will take the user through the
       // google authentication flow
       const newToken: GoogleAccessToken = await startGoogleAuthentication(
-        configuration
+        configuration,
       );
       // Means we were successful
       this.setState(SignerState.Authenticated);
@@ -376,7 +375,7 @@ export class Signer {
     chainId: string,
     memo: string,
     accountNumber: string,
-    sequence: string
+    sequence: string,
   ): Promise<StdSignature> {
     return this.sendMessageAndPromiseToRespond<StdSignature>({
       target: "Signer",
