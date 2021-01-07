@@ -35,7 +35,8 @@ export const resizeToFit = (window: Window): void => {
       const finalWidth = 2 * width - window.innerWidth;
       const finalHeight = 2 * height - window.innerHeight;
       // Finally apply the new and definitive size
-      resizeAndCenter(window, finalWidth, finalHeight);
+      // resizeAndCenter(window, finalWidth, finalHeight);
+      console.log(finalWidth, finalHeight);
     };
     // Now apply these to the window
     resizeAndCenter(window, width, height);

@@ -6,6 +6,7 @@ type GenericCallback = (...args: any[]) => void;
 
 export class Modal {
   private popup: Window | null;
+  private settled = false;
 
   private handlers: { [event in ModalEvents]: GenericCallback | undefined } = {
     [ModalEvents.Rejected]: undefined,
@@ -20,28 +21,47 @@ export class Modal {
     }
   }
 
-  private loadHandler = (): void => {
+  private accept(): void {
+    this.settled = true;
+    this.invokeHandler(ModalEvents.Accepted);
+  }
+
+  private reject(): void {
+    this.settled = true;
+    this.invokeHandler(ModalEvents.Rejected);
+  }
+
+  private onLoad = (): void => {
     const { popup } = this;
     const { document } = popup;
+    document.addEventListener("keydown", (event: KeyboardEvent): void => {
+      if (event.ctrlKey) {
+        if (event.key === "W" || event.key === "w") {
+          return;
+        } else {
+          event.preventDefault();
+        }
+      }
+      // In principle, other targets should allow keyboard
+      // events
+      if (event.target === document.body) {
+        event.preventDefault();
+      }
+    });
     // Install button handlers
-    const accept: HTMLElement | null = document.querySelector(
-      "[data-button='accept']"
+    const accepts: NodeListOf<HTMLElement> = document.querySelectorAll(
+      "[data-button='accept']",
     );
-    const reject: HTMLElement | null = document.querySelector(
-      "[data-button='reject']"
+    const rejects: NodeListOf<Element> = document.querySelectorAll(
+      "[data-button='reject']",
     );
-    if (accept === null || reject === null) {
-      throw new Error(
-        "content is expected to have 2 buttons one with the `data-button' attribute set to" +
-          ' "accept" and the other to "reject"'
-      );
-    }
-    accept.addEventListener("click", (): void =>
-      this.invokeHandler(ModalEvents.Accepted)
-    );
-    reject.addEventListener("click", (): void =>
-      this.invokeHandler(ModalEvents.Rejected)
-    );
+    accepts.forEach((accept: HTMLElement): void => {
+      accept.onclick = (): void => this.accept();
+    });
+    // We allow multiple reject buttons
+    rejects.forEach((reject: HTMLElement): void => {
+      reject.onclick = (): void => this.reject();
+    });
     // In case the caller wants to do something, let's allow them
     this.invokeHandler(ModalEvents.Loaded, document);
     // Wait until the popup is fully "loaded" with
@@ -68,7 +88,7 @@ export class Modal {
         width: width,
         top: (screen.height - height) / 2,
         height: height,
-      })
+      }),
     );
     if (popup === null) {
       console.warn("this is crazy man!");
@@ -77,11 +97,21 @@ export class Modal {
     }
     this.popup = popup;
     // For the load event, we want to setup a few things
-    popup.addEventListener("load", this.loadHandler);
-    // Watch the window to catch if the user closes it
+    popup.addEventListener("load", this.onLoad);
+    // Watch the window to catch if the user closes it. It runs on both,
+    // user clicking the x of the window and closing it and programmatically
+    // calling .close()
+    //
+    // For this reason, we need the ability to know if it was an spontaneous
+    // action from the user or of the user clicked one of the control buttons
+    // that could trigger a programmatic call to .close()
     setWindowCloseHandler(popup, (): void => {
-      // This is the same as "reject"
-      this.invokeHandler(ModalEvents.Rejected);
+      // If the popup was settled it means we don't need to emit a
+      // spontaneous reject event
+      if (!this.settled) {
+        // This is the same as "reject"
+        this.invokeHandler(ModalEvents.Rejected);
+      }
       // Now call the "close" method
       this.close();
     });
@@ -91,20 +121,14 @@ export class Modal {
     const { popup } = this;
     // Close the window if it's not already closed
     if (popup !== null && popup.closed === false) {
-      popup.removeEventListener("load", this.loadHandler);
+      popup.removeEventListener("load", this.onLoad);
       popup.close();
     }
     // Release memory
     this.popup = null;
-    // Just keep it clean ;)
-    this.handlers = {
-      [ModalEvents.Rejected]: undefined,
-      [ModalEvents.Loaded]: undefined,
-      [ModalEvents.Accepted]: undefined,
-    };
   }
 
-  public on(event: ModalEvents, handler: (...args: any[]) => void) {
+  public on(event: ModalEvents, handler: (...args: any[]) => void): void {
     this.handlers[event] = handler;
   }
 }

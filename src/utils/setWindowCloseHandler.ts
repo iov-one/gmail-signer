@@ -1,6 +1,6 @@
 export const setWindowCloseHandler = (
   targetWindow: Window,
-  handler: (location: Location | null) => void
+  handler: (location: Location | null) => void,
 ): void => {
   let lastLocation: Location | null = null;
   // Not an elegant method to do this, but apparently the only available
@@ -23,11 +23,12 @@ export const setWindowCloseHandler = (
     // Stop the interval now
     return true;
   };
-  checkWindowCloseState();
-  // Now do it regularly
-  const interval = setInterval((): void => {
-    if (checkWindowCloseState()) {
-      clearInterval(interval);
-    }
-  }, 350);
+  if (!checkWindowCloseState()) {
+    // Now do it regularly
+    const interval = setInterval((): void => {
+      if (checkWindowCloseState()) {
+        clearInterval(interval);
+      }
+    }, 350);
+  }
 };

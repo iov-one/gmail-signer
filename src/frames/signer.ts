@@ -27,7 +27,7 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
           data.chainId,
           data.memo,
           data.accountNumber,
-          data.sequence
+          data.sequence,
         );
       } catch (error: any) {
         return {

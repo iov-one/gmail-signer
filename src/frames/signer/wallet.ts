@@ -1,11 +1,12 @@
 import {
   AccountData,
   makeSignBytes,
-  Secp256k1Wallet,
-  StdSignature,
   Msg,
-  StdFee
+  Secp256k1Wallet,
+  StdFee,
+  StdSignature,
 } from "@cosmjs/launchpad";
+
 import { parseHDPath } from "./parseHDPath";
 
 export class Wallet {
@@ -14,12 +15,12 @@ export class Wallet {
   public async initialize(
     mnemonic: string,
     hdPath: string,
-    prefix: string
+    prefix: string,
   ): Promise<void> {
     this.wallet = await Secp256k1Wallet.fromMnemonic(
       mnemonic,
       parseHDPath(hdPath),
-      prefix
+      prefix,
     );
   }
 
@@ -37,19 +38,22 @@ export class Wallet {
   }
 
   public async sign(
-    messages: Msg[], 
-    fee: StdFee, 
-    chainId: string, 
-    memo: string, 
-    accountNumber: number, 
-    sequence: number
-): Promise<StdSignature> {
+    messages: ReadonlyArray<Msg>,
+    fee: StdFee,
+    chainId: string,
+    memo: string,
+    accountNumber: number,
+    sequence: number,
+  ): Promise<StdSignature> {
     const { wallet } = this;
-    const signBytes = makeSignBytes(messages, fee, chainId, memo, accountNumber, sequence);
-    const signature: StdSignature = await wallet.sign(
-      await this.getAddress(),
-      signBytes
+    const signBytes = makeSignBytes(
+      messages,
+      fee,
+      chainId,
+      memo,
+      accountNumber,
+      sequence,
     );
-    return signature;
+    return await wallet.sign(await this.getAddress(), signBytes);
   }
 }

@@ -1,20 +1,40 @@
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "../constants";
 import { GoogleAccessToken } from "../types/googleAccessToken";
 
-const isAccessTokeExpired = async (
-  accessToken: GoogleAccessToken
+interface TokenInfo {
+  readonly access_type: string;
+  readonly aud: string;
+  readonly azp: string;
+  readonly exp: string;
+  readonly expires_in: string;
+  readonly scope: string;
+}
+
+const isAccessTokenValid = async (
+  accessToken: GoogleAccessToken,
 ): Promise<boolean> => {
-  return accessToken.expiresAt < Date.now();
+  if (accessToken.expiresAt < Date.now()) {
+    return false;
+  }
+  const url: string =
+    "https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=" +
+    accessToken.token;
+  try {
+    const response: Response = await fetch(url);
+    return response.status === 200;
+  } catch {
+    return false;
+  }
 };
 
 export const tryToAuthenticateWithSavedToken = async (): Promise<GoogleAccessToken | null> => {
-  await new Promise((resolve: () => void): void => {
+  await new Promise((resolve: (value: unknown) => void): void => {
     setTimeout(resolve, 3000);
   });
   // Attempt to see if we already have a token to query the GDrive
   // api with
   const savedToken: string | null = localStorage.getItem(
-    GOOGLE_ACCESS_TOKEN_STORAGE_PATH
+    GOOGLE_ACCESS_TOKEN_STORAGE_PATH,
   );
   // Check if we already own an access token
   if (savedToken !== null) {
@@ -24,8 +44,9 @@ export const tryToAuthenticateWithSavedToken = async (): Promise<GoogleAccessTok
     // without prompting the user
     try {
       const accessToken: GoogleAccessToken = JSON.parse(savedToken);
+      const isValid = await isAccessTokenValid(accessToken);
       // We also must confirm that it is not expired
-      if (await isAccessTokeExpired(accessToken)) {
+      if (!isValid) {
         // Token has expired
         localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
       } else {
