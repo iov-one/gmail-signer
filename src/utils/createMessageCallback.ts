@@ -1,7 +1,7 @@
 import { isMessage, Message } from "../types/message";
 
 export const createMessageCallback = (
-  callback: (message: Message) => Promise<void>
+  callback: (message: Message) => Promise<void>,
 ): ((event: MessageEvent) => void) => {
   return function (event: MessageEvent): Promise<void> {
     const { data } = event;

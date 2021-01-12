@@ -23,6 +23,8 @@ export enum SignerState {
   PreparingSigner,
   SignedOut,
   SignerReady,
+  Authenticating,
+  Error,
 }
 
 export interface SignerConfig {
@@ -65,14 +67,14 @@ export class Signer {
    *
    * @private
    */
-  private setState(state: SignerState): void {
+  private setState = (state: SignerState): void => {
     const handler: (readyState: SignerState, data?: any) => void = this
       .eventHandlers[Events.StateChange];
     if (handler !== undefined) {
       // Call the handler for it
       handler(state, undefined);
     }
-  }
+  };
 
   /**
    * Core message handler to interact with the sandboxed frame(s)
@@ -82,7 +84,7 @@ export class Signer {
    * Note: This method is deliberately implemented as an arrow function
    *       because it needs to have a well defined "this" object
    */
-  private onMessage = async (message: Message): Promise<void> => {
+  private onMessageCallback = async (message: Message): Promise<void> => {
     const { sandbox } = this;
     if (message.target !== "Root") {
       throw new Error("this type of message should never reach this window");
@@ -112,6 +114,8 @@ export class Signer {
     }
   };
 
+  private onMessage = createMessageCallback(this.onMessageCallback);
+
   /**
    * onError
    *
@@ -119,7 +123,7 @@ export class Signer {
    *
    * @private
    */
-  private onError(message: Message): void {
+  private onError = (message: Message): void => {
     const { uid } = message;
     if (uid !== undefined) {
       const resolver: PromiseResolver | undefined = this.getResolver(uid);
@@ -131,19 +135,7 @@ export class Signer {
     } else {
       console.warn(message.data);
     }
-  }
-
-  /**
-   * Create a message listener function that has access to `this'.
-   *
-   * This will listen to all messages sent to the root window, and act according
-   * to the type of message.
-   *
-   * @private
-   */
-  private createMessageListener(): (event: MessageEvent) => void {
-    return createMessageCallback(this.onMessage);
-  }
+  };
 
   /**
    * Initialize the wallet from the newly/saved access token that we just got
@@ -152,7 +144,9 @@ export class Signer {
    *
    * @private
    */
-  private initializeWallet(accessToken: GoogleAccessToken): Promise<void> {
+  private initializeWallet = (
+    accessToken: GoogleAccessToken,
+  ): Promise<void> => {
     this.setState(SignerState.PreparingSigner);
     // Save it for later use
     localStorage.setItem(
@@ -165,7 +159,7 @@ export class Signer {
       type: "Authenticated",
       data: accessToken,
     });
-  }
+  };
 
   /**
    * Returns a promise resolver for a given uid if there exists one. These resolvers are only created
@@ -176,7 +170,7 @@ export class Signer {
    *
    * @private
    */
-  private getResolver(uuid: string): PromiseResolver | undefined {
+  private getResolver = (uuid: string): PromiseResolver | undefined => {
     if (uuid in this.resolvers) {
       const resolver: PromiseResolver = this.resolvers[uuid];
       delete this.resolvers[uuid];
@@ -184,7 +178,7 @@ export class Signer {
     } else {
       return undefined;
     }
-  }
+  };
 
   /**
    * Forward the message to it's resolver, it must exist or we must throw
@@ -192,7 +186,7 @@ export class Signer {
    * @param message
    * @private
    */
-  private forwardMessageToPromiseResolver(message: Message): void {
+  private forwardMessageToPromiseResolver = (message: Message): void => {
     const { uid } = message;
     if (uid === undefined) {
       console.warn(
@@ -210,7 +204,7 @@ export class Signer {
         // Remove the resolver now
       }
     }
-  }
+  };
 
   /**
    * Send a message and setup a promise resolver so that when there's a response
@@ -220,7 +214,9 @@ export class Signer {
    *
    * @private
    */
-  private sendMessageAndPromiseToRespond<T>(message: Message): Promise<T> {
+  private sendMessageAndPromiseToRespond = <T>(
+    message: Message,
+  ): Promise<T> => {
     const { sandbox } = this;
     const uid: string = uuid.v4();
     return new Promise<T>(
@@ -241,12 +237,13 @@ export class Signer {
         });
       },
     );
-  }
+  };
 
   /**
    * Sign-in using google and gain access to GDrive
    */
   public signIn = async (): Promise<void> => {
+    this.setState(SignerState.Authenticating);
     // Try to auto-authenticate
     const savedToken: GoogleAccessToken | null = await tryToAuthenticateWithSavedToken();
     // If we had a token already, let's use it. This is smart enough to return `null'
@@ -282,28 +279,55 @@ export class Signer {
    * Google and authorize the library to securely manage their mnemonic string
    *
    * @param application Google's configuration for OAuth
+   * @param parent Parent to place the iframe inside of
    */
-  public connect(application: Application): () => void {
+  public connect = (application: Application, parent: HTMLElement): void => {
     this.setState(SignerState.Loading);
-    const onMessage = this.createMessageListener();
     // Listen to messages from the iframes before creating
     // them, because the existence of one of them is the first
     // message that is sent
-    window.addEventListener("message", onMessage);
+    window.addEventListener("message", this.onMessage);
     // Create the signer window
-    this.sandbox = createSandboxedIframe(content, this.signerConfig);
-    this.googleConfig = application;
-    // Return a "cleanup" function to remove the listener and avoid leaks
-    return () => {
-      const { parentNode: parent } = this.sandbox;
-      if (parent !== null) {
-        // Remove the iframe from the body of the document
-        parent.removeChild(this.sandbox);
-      }
-      // Remove listeners
-      window.removeEventListener("message", onMessage);
+    const sandbox: HTMLIFrameElement = createSandboxedIframe(
+      content,
+      this.signerConfig,
+      "custodian",
+      parent,
+    );
+    const {
+      contentDocument: { body: clickTarget },
+    } = sandbox;
+    clickTarget.onclick = (): void => {
+      this.signIn();
     };
-  }
+    this.sandbox = sandbox;
+    // Export google config to the class level
+    this.googleConfig = application;
+  };
+
+  private disconnect = (): void => {
+    const { parentNode: parent } = this.sandbox;
+    if (parent !== null) {
+      // Remove the iframe from the body of the document
+      parent.removeChild(this.sandbox);
+    }
+    // Remove listeners
+    window.removeEventListener("message", this.onMessage);
+  };
+
+  public locateAt = (rectangle: DOMRect): void => {
+    const button: HTMLElement = this.sandbox;
+    const { style } = button;
+    const zIndex: number = Number.MAX_SAFE_INTEGER;
+
+    style.position = "fixed";
+    style.top = rectangle.top + "px";
+    style.height = rectangle.height + "px";
+    style.left = rectangle.left + "px";
+    style.width = rectangle.width + "px";
+    // Right behind the button
+    style.zIndex = zIndex.toString();
+  };
 
   /**
    * Set event listeners for the various types of events that are generated
@@ -315,49 +339,51 @@ export class Signer {
    * Note: we allow one listener per event because as of now it does not make
    *       sense to have more than one listener per event.
    */
-  public on(event: Events, handler: EventHandler): void {
+  public on = (event: Events, handler: EventHandler): void => {
     this.eventHandlers[event] = handler;
-  }
+  };
 
   /**
    * Remove the event listener for this event
    *
    * @param event The name of the event to disconnect the listener from
    */
-  public off(event: Events): void {
+  public off = (event: Events): void => {
     if (event in this.eventHandlers) {
       delete this.eventHandlers[event];
     }
-  }
+  };
 
   /**
    * This method is used to revoke all permissions given to the signer
    */
-  public abandon(): Promise<void> {
+  public abandon = (): Promise<void> => {
     localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
     return this.sendMessageAndPromiseToRespond({
       target: "Custodian",
       type: "Abandon",
     });
-  }
+  };
 
   /**
    * This methods should be used to close Google's session
    */
-  public signOut(): Promise<void> {
+  public signOut = async (): Promise<void> => {
     localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
-    return this.sendMessageAndPromiseToRespond({
+    await this.sendMessageAndPromiseToRespond({
       target: "Custodian",
       type: "SignOut",
     });
-  }
+    console.log("disconnecting");
+    this.disconnect();
+  };
 
-  public async getAddress(): Promise<string> {
+  public getAddress = (): Promise<string> => {
     return this.sendMessageAndPromiseToRespond<string>({
       target: "Signer",
       type: "GetAddress",
     });
-  }
+  };
 
   /**
    * Sign given set of messages
@@ -369,14 +395,14 @@ export class Signer {
    * @param accountNumber The account number (FIXME: it should be possible to compute this actually)
    * @param sequence The sequence number (FIXME: it should be also possible to compute this too)
    */
-  public async sign(
+  public sign = (
     messages: Msg[],
     fee: StdFee,
     chainId: string,
     memo: string,
     accountNumber: string,
     sequence: string,
-  ): Promise<StdSignature> {
+  ): Promise<StdSignature> => {
     return this.sendMessageAndPromiseToRespond<StdSignature>({
       target: "Signer",
       type: "SignTx",
@@ -389,15 +415,19 @@ export class Signer {
         sequence: sequence,
       },
     });
-  }
+  };
 
   /**
    * Delete an existing account
    */
-  public async deleteAccount(): Promise<void> {
+  public deleteAccount = (): Promise<void> => {
     return this.sendMessageAndPromiseToRespond({
       target: "Custodian",
       type: "DeleteAccount",
     });
-  }
+  };
+
+  public getElement = (): HTMLElement => {
+    return this.sandbox;
+  };
 }

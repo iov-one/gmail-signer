@@ -100,5 +100,11 @@ const onMessage = async (message: Message): Promise<void> => {
 
 window.onmessage = createMessageCallback(onMessage);
 window.onload = (): void => {
-  CHILD_CONTAINER.child = createSandboxedIframe(signer, window.signerConfig);
+  CHILD_CONTAINER.child = createSandboxedIframe(
+    signer,
+    window.signerConfig,
+    "signer",
+  );
 };
+
+
