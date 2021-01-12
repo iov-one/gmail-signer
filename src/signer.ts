@@ -1,4 +1,8 @@
 import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
+import { GoogleOAuthError, isGoogleOAuthError } from "./types/googleOAuthError";
+import { extractAccessTokeFromUrl } from "./utils/extractAccessTokeFromUrl";
+import { toQueryString, toWindowOptions } from "./utils/helpers";
+import { setWindowCloseHandler } from "./utils/setWindowCloseHandler";
 import * as uuid from "uuid";
 
 import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "./constants";
@@ -12,7 +16,6 @@ import { Message } from "./types/message";
 import { createMessageCallback } from "./utils/createMessageCallback";
 import { createSandboxedIframe } from "./utils/createSandboxedIframe";
 import { sendMessage } from "./utils/sendMessage";
-import { startGoogleAuthentication } from "./utils/startGoogleAuthentication";
 
 type EventHandler = (...args: any[]) => void;
 
@@ -262,10 +265,72 @@ export class Signer {
           "cannot access google's configuration, so cannot create the authentication modal",
         );
       }
-      // Start a new promise that will take the user through the
-      // google authentication flow
-      const newToken: GoogleAccessToken = await startGoogleAuthentication(
-        configuration,
+      const queryString: string = toQueryString({
+        client_id: configuration.clientID,
+        response_type: "token",
+        scope: "https://www.googleapis.com/auth/drive.appdata",
+        // Redirect to the popup window because we can parse this
+        // and extract the code to ask for the token
+        redirect_uri: configuration.redirectURI,
+      });
+      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${queryString}`;
+      const width = 530;
+      const height = 639;
+      // We don't use the response
+      const popup: Window = window.open(
+        oauthUrl,
+        "google-oauth-window",
+        toWindowOptions({
+          menubar: "no",
+          location: "no",
+          chrome: "yes",
+          dialog: "yes",
+          resizeable: "no",
+          status: "no",
+          left: (screen.width - width) / 2,
+          width: width,
+          top: (screen.height - height) / 2,
+          height: height,
+        }),
+      );
+      if (popup === null) {
+        // FIXME: request permission from the user to show modals and go again
+        return;
+      }
+      const newToken = await new Promise(
+        (
+          resolve: (accessToken: GoogleAccessToken) => void,
+          reject: (error?: GoogleOAuthError | Error) => void,
+        ): void => {
+          const { redirectURI } = configuration;
+          setWindowCloseHandler(popup, (location: Location | null): void => {
+            if (location === null) {
+              reject(
+                new Error(
+                  "cannot get the google access token from this window",
+                ),
+              );
+            }
+            const { href } = location;
+            if (href === undefined) {
+              // Seems to also mean that the user did nothing
+              reject(new Error("user cancelled authentication"));
+            } else if (!href.startsWith(redirectURI)) {
+              // Means the user closed the modal before being redirected
+              // by google
+              reject(new Error("user cancelled authentication"));
+            } else {
+              const result:
+                | GoogleAccessToken
+                | GoogleOAuthError = extractAccessTokeFromUrl(location);
+              if (!isGoogleOAuthError(result)) {
+                resolve(result);
+              } else {
+                reject(result);
+              }
+            }
+          });
+        },
       );
       // Means we were successful
       this.setState(SignerState.Authenticated);
@@ -294,12 +359,14 @@ export class Signer {
       "custodian",
       parent,
     );
-    const {
-      contentDocument: { body: clickTarget },
-    } = sandbox;
-    clickTarget.onclick = (): void => {
-      this.signIn();
-    };
+    const { contentDocument } = sandbox;
+    const clickTarget: HTMLButtonElement | null = contentDocument.querySelector(
+      "button",
+    );
+    if (clickTarget === null) {
+      throw new Error("this should never happen");
+    }
+    clickTarget.onclick = this.signIn;
     this.sandbox = sandbox;
     // Export google config to the class level
     this.googleConfig = application;
@@ -374,7 +441,6 @@ export class Signer {
       target: "Custodian",
       type: "SignOut",
     });
-    console.log("disconnecting");
     this.disconnect();
   };
 
