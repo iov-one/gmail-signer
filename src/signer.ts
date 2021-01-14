@@ -1,13 +1,7 @@
 import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
-import { GoogleOAuthError, isGoogleOAuthError } from "./types/googleOAuthError";
-import { extractAccessTokeFromUrl } from "./utils/extractAccessTokeFromUrl";
-import { toQueryString, toWindowOptions } from "./utils/helpers";
-import { setWindowCloseHandler } from "./utils/setWindowCloseHandler";
+import { GoogleAuthInfo } from "types/gogoleAuthInfo";
 import * as uuid from "uuid";
 
-import { GOOGLE_ACCESS_TOKEN_STORAGE_PATH } from "./constants";
-import { onAccessTokenReceived } from "./events/onAccessTokenReceived";
-import { tryToAuthenticateWithSavedToken } from "./events/tryToAuthenticateWithSavedToken";
 import content from "./templates/custodian.html";
 import { Application } from "./types/application";
 import { CommonError } from "./types/commonError";
@@ -27,13 +21,12 @@ export enum SignerState {
   SignedOut,
   SignerReady,
   Authenticating,
-  Error,
+  Failed,
+  CancelledByUser,
+  AuthenticatorReady,
 }
 
 export interface SignerConfig {
-  readonly mnemonic: {
-    readonly path: string;
-  };
   readonly authorization: {
     readonly path: string;
   };
@@ -88,7 +81,6 @@ export class Signer {
    *       because it needs to have a well defined "this" object
    */
   private onMessageCallback = async (message: Message): Promise<void> => {
-    const { sandbox } = this;
     if (message.target !== "Root") {
       throw new Error("this type of message should never reach this window");
     } else {
@@ -96,8 +88,6 @@ export class Signer {
         case "Sandboxed":
           this.setState(SignerState.Sandboxed);
           break;
-        case "Authenticated":
-          return onAccessTokenReceived(sandbox.contentWindow, message.data);
         case "SignerReady":
           this.setState(SignerState.SignerReady);
           break;
@@ -151,11 +141,6 @@ export class Signer {
     accessToken: GoogleAccessToken,
   ): Promise<void> => {
     this.setState(SignerState.PreparingSigner);
-    // Save it for later use
-    localStorage.setItem(
-      GOOGLE_ACCESS_TOKEN_STORAGE_PATH,
-      JSON.stringify(accessToken),
-    );
     // Generate the message-promise
     return this.sendMessageAndPromiseToRespond({
       target: "Custodian",
@@ -243,137 +228,59 @@ export class Signer {
   };
 
   /**
-   * Sign-in using google and gain access to GDrive
-   */
-  public signIn = async (): Promise<void> => {
-    this.setState(SignerState.Authenticating);
-    // Try to auto-authenticate
-    const savedToken: GoogleAccessToken | null = await tryToAuthenticateWithSavedToken();
-    // If we had a token already, let's use it. This is smart enough to return `null'
-    // if the token has expired
-    if (savedToken !== null) {
-      // FIXME: we need to refresh the token, right?
-      this.setState(SignerState.Authenticated);
-      // We should probably send a message here no?
-      await this.initializeWallet(savedToken);
-    } else {
-      // If we got here, then the user needs to authenticate, that includes possibly
-      // give the application access to GDrive
-      const configuration: Application | null = this.googleConfig;
-      if (configuration === null) {
-        throw new Error(
-          "cannot access google's configuration, so cannot create the authentication modal",
-        );
-      }
-      const queryString: string = toQueryString({
-        client_id: configuration.clientID,
-        response_type: "token",
-        scope: "https://www.googleapis.com/auth/drive.appdata",
-        // Redirect to the popup window because we can parse this
-        // and extract the code to ask for the token
-        redirect_uri: configuration.redirectURI,
-      });
-      const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${queryString}`;
-      const width = 530;
-      const height = 639;
-      // We don't use the response
-      const popup: Window = window.open(
-        oauthUrl,
-        "google-oauth-window",
-        toWindowOptions({
-          menubar: "no",
-          location: "no",
-          chrome: "yes",
-          dialog: "yes",
-          resizeable: "no",
-          status: "no",
-          left: (screen.width - width) / 2,
-          width: width,
-          top: (screen.height - height) / 2,
-          height: height,
-        }),
-      );
-      if (popup === null) {
-        // FIXME: request permission from the user to show modals and go again
-        return;
-      }
-      const newToken = await new Promise(
-        (
-          resolve: (accessToken: GoogleAccessToken) => void,
-          reject: (error?: GoogleOAuthError | Error) => void,
-        ): void => {
-          const { redirectURI } = configuration;
-          setWindowCloseHandler(popup, (location: Location | null): void => {
-            if (location === null) {
-              reject(
-                new Error(
-                  "cannot get the google access token from this window",
-                ),
-              );
-            }
-            const { href } = location;
-            if (href === undefined) {
-              // Seems to also mean that the user did nothing
-              reject(new Error("user cancelled authentication"));
-            } else if (!href.startsWith(redirectURI)) {
-              // Means the user closed the modal before being redirected
-              // by google
-              reject(new Error("user cancelled authentication"));
-            } else {
-              const result:
-                | GoogleAccessToken
-                | GoogleOAuthError = extractAccessTokeFromUrl(location);
-              if (!isGoogleOAuthError(result)) {
-                resolve(result);
-              } else {
-                reject(result);
-              }
-            }
-          });
-        },
-      );
-      // Means we were successful
-      this.setState(SignerState.Authenticated);
-      // We should probably send a message here no?
-      await this.initializeWallet(newToken);
-    }
-  };
-
-  /**
    * This function initializes the whole flow that allows the user to authenticate with
    * Google and authorize the library to securely manage their mnemonic string
    *
    * @param application Google's configuration for OAuth
-   * @param parent Parent to place the iframe inside of
    */
-  public connect = (application: Application, parent: HTMLElement): void => {
+  public connect = async (application: Application): Promise<void> => {
     this.setState(SignerState.Loading);
     // Listen to messages from the iframes before creating
     // them, because the existence of one of them is the first
     // message that is sent
     window.addEventListener("message", this.onMessage);
-    // Create the signer window
-    const sandbox: HTMLIFrameElement = createSandboxedIframe(
+    // Create the custodian window
+    this.sandbox = await createSandboxedIframe(
       content,
-      this.signerConfig,
+      {
+        signer: this.signerConfig,
+        application: application,
+      },
       "custodian",
-      parent,
+      document.body,
     );
-    const { contentDocument } = sandbox;
-    const clickTarget: HTMLButtonElement | null = contentDocument.querySelector(
-      "button",
-    );
-    if (clickTarget === null) {
-      throw new Error("this should never happen");
+    const { contentDocument } = this.sandbox;
+    const onStarted = (): void => {
+      this.setState(SignerState.Authenticating);
+    };
+    const onFailure = (event: Event): void => {
+      const { detail: error } = event as CustomEvent;
+      if (error === "popup_closed_by_user") {
+        this.setState(SignerState.CancelledByUser);
+      } else {
+        this.setState(SignerState.Failed);
+      }
+    };
+    const onSuccess = (rawEvent: Event): void => {
+      const {
+        detail: { accessToken },
+      } = rawEvent as CustomEvent<GoogleAuthInfo>;
+      this.setState(SignerState.Authenticated);
+      this.initializeWallet(accessToken);
+    };
+    const onReady = (): void => {
+      this.setState(SignerState.AuthenticatorReady);
     }
-    clickTarget.onclick = this.signIn;
-    this.sandbox = sandbox;
+    contentDocument.addEventListener("auth-started", onStarted);
+    contentDocument.addEventListener("auth-succeeded", onSuccess);
+    contentDocument.addEventListener("auth-failed", onFailure);
+    contentDocument.addEventListener("auth-ready", onReady);
     // Export google config to the class level
     this.googleConfig = application;
   };
 
   private disconnect = (): void => {
-    const { parentNode: parent } = this.sandbox;
+    const parent: HTMLElement = document.body;
     if (parent !== null) {
       // Remove the iframe from the body of the document
       parent.removeChild(this.sandbox);
@@ -382,9 +289,13 @@ export class Signer {
     window.removeEventListener("message", this.onMessage);
   };
 
+  /**
+   * Locates and resizes the iframe in the specified rectangle
+   *
+   * @param rectangle
+   */
   public locateAt = (rectangle: DOMRect): void => {
-    const button: HTMLElement = this.sandbox;
-    const { style } = button;
+    const { style } = this.sandbox;
     const zIndex: number = Number.MAX_SAFE_INTEGER;
 
     style.position = "fixed";
@@ -422,28 +333,16 @@ export class Signer {
   };
 
   /**
-   * This method is used to revoke all permissions given to the signer
-   */
-  public abandon = (): Promise<void> => {
-    localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
-    return this.sendMessageAndPromiseToRespond({
-      target: "Custodian",
-      type: "Abandon",
-    });
-  };
-
-  /**
    * This methods should be used to close Google's session
    */
   public signOut = async (): Promise<void> => {
-    localStorage.removeItem(GOOGLE_ACCESS_TOKEN_STORAGE_PATH);
-    await this.sendMessageAndPromiseToRespond({
-      target: "Custodian",
-      type: "SignOut",
-    });
     this.disconnect();
   };
 
+  /**
+   * Returns the address associated with the private
+   * key
+   */
   public getAddress = (): Promise<string> => {
     return this.sendMessageAndPromiseToRespond<string>({
       target: "Signer",
@@ -480,16 +379,6 @@ export class Signer {
         accountNumber: accountNumber,
         sequence: sequence,
       },
-    });
-  };
-
-  /**
-   * Delete an existing account
-   */
-  public deleteAccount = (): Promise<void> => {
-    return this.sendMessageAndPromiseToRespond({
-      target: "Custodian",
-      type: "DeleteAccount",
     });
   };
 

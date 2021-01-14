@@ -1,3 +1,6 @@
+import { Application } from "types/application";
+import { GoogleAuthInfo } from "types/gogoleAuthInfo";
+
 import { SignerConfig } from "../signer";
 import signer from "../templates/signer.html";
 import { GoogleAccessToken } from "../types/googleAccessToken";
@@ -16,9 +19,13 @@ const CHILD_CONTAINER: ChildContainer = new ChildContainer();
 declare global {
   interface Window {
     accessToken: GoogleAccessToken;
-    signerConfig: SignerConfig;
+    signer: SignerConfig;
+    application: Application;
+    gapi: any /* Google API */;
   }
 }
+
+const { gapi, application } = window;
 
 const handleMessage = async (message: Message): Promise<Message | null> => {
   const { data } = message;
@@ -98,13 +105,84 @@ const onMessage = async (message: Message): Promise<void> => {
   }
 };
 
-window.onmessage = createMessageCallback(onMessage);
 window.onload = (): void => {
-  CHILD_CONTAINER.child = createSandboxedIframe(
+  createSandboxedIframe(
     signer,
-    window.signerConfig,
+    {
+      signer: window.signer,
+      application: window.application,
+    },
     "signer",
-  );
+  )
+    .then((frame: HTMLIFrameElement): void => {
+      CHILD_CONTAINER.child = frame;
+      // Announce initialization
+      window.postMessage("", location.origin);
+      // Attach the event listener
+      window.addEventListener("message", createMessageCallback(onMessage));
+    })
+    .catch((error: any): void => {
+      console.warn(error);
+    });
 };
 
+const transformGooglesResponse = (user: any): GoogleAuthInfo => {
+  const { Bc, Nt } = user;
+  return {
+    accessToken: {
+      token: Bc.access_token,
+      expiresAt: Bc.expires_at,
+      idToken: Bc.id_token,
+      type: Bc.token_type,
+      scope: Bc.scope,
+      state: Bc.state,
+    },
+    user: {
+      firstName: Nt.EW,
+      lastName: Nt.IU,
+      email: Nt.uu,
+      picture: Nt.fL,
+    },
+  };
+};
 
+const main = (): void => {
+  gapi.load("auth2", () => {
+    const target = document.getElementById("gdrive-custodian-sign-in-button");
+    gapi.auth2
+      .init({
+        client_id: application.clientID,
+        scope: "https://www.googleapis.com/auth/drive.appdata",
+      })
+      .then((auth2: any): void => {
+        const currentUser = auth2.currentUser.get();
+        const onSignedIn = (user: any): void => {
+          document.dispatchEvent(
+            new CustomEvent("auth-succeeded", {
+              detail: transformGooglesResponse(user),
+            }),
+          );
+        };
+        const onFailure = (error: any): void => {
+          document.dispatchEvent(
+            new CustomEvent("auth-failed", {
+              detail: error,
+            }),
+          );
+        };
+        const onClick = (): void => {
+          document.dispatchEvent(new Event("auth-started"));
+          if (currentUser.isSignedIn()) {
+            onSignedIn(currentUser);
+          }
+        };
+        if (!currentUser.isSignedIn()) {
+          auth2.attachClickHandler(target, {}, onSignedIn, onFailure);
+        }
+        target.addEventListener("click", onClick, true);
+        document.dispatchEvent(new Event("auth-ready"));
+      });
+  });
+};
+
+main();

@@ -7,11 +7,11 @@ export interface Message<T = any> {
   readonly data?: T;
 }
 
-export const isMessage = (object: any): object is Message => {
+export const isMessage = (object: Message | never): object is Message => {
   if (typeof object !== "object") return false;
   if ("target" in object && "type" in object) {
     return ["Custodian", "Signer", "Root"].some(
-      (item: string): boolean => item === object.target
+      (item: string): boolean => item === object.target,
     );
   } else {
     return false;
