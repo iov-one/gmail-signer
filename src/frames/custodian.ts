@@ -127,21 +127,22 @@ window.onload = (): void => {
 };
 
 const transformGooglesResponse = (user: any): GoogleAuthInfo => {
-  const { Bc, Nt } = user;
+  const profile = user.getBasicProfile();
+  const auth = user.getAuthResponse(true);
   return {
     accessToken: {
-      token: Bc.access_token,
-      expiresAt: Bc.expires_at,
-      idToken: Bc.id_token,
-      type: Bc.token_type,
-      scope: Bc.scope,
-      state: Bc.state,
+      token: auth.access_token,
+      expiresAt: auth.expires_at,
+      idToken: auth.id_token,
+      type: auth.token_type,
+      scope: auth.scope,
+      state: undefined,
     },
     user: {
-      firstName: Nt.EW,
-      lastName: Nt.IU,
-      email: Nt.uu,
-      picture: Nt.fL,
+      firstName: profile.getGivenName(),
+      lastName: profile.getFamilyName(),
+      email: profile.getEmail(),
+      picture: profile.getImageUrl(),
     },
   };
 };
