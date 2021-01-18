@@ -29,7 +29,7 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
           data.accountNumber,
           data.sequence,
         );
-      } catch (error: any) {
+      } catch (error) {
         return {
           target: "Root",
           type: "Error",

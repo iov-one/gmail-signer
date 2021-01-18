@@ -21,7 +21,7 @@ export const createSandboxedIframe = async (
   // Now set it's content to the specified
   const { contentWindow, contentDocument } = frame;
   // Set global data
-  contentWindow.signer = config.signer;
+  contentWindow.signerConfig = config.signer;
   contentWindow.application = config.application;
   // Write the html
   contentDocument.open();

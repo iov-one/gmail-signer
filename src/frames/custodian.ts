@@ -19,7 +19,7 @@ const CHILD_CONTAINER: ChildContainer = new ChildContainer();
 declare global {
   interface Window {
     accessToken: GoogleAccessToken;
-    signer: SignerConfig;
+    signerConfig: SignerConfig;
     application: Application;
     gapi: any /* Google API */;
   }
@@ -34,7 +34,7 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
       window.accessToken = data;
       try {
         return await onAuthenticated();
-      } catch (error: any) {
+      } catch (error) {
         window.accessToken = null;
         return {
           target: "Root",
@@ -109,7 +109,7 @@ window.onload = (): void => {
   createSandboxedIframe(
     signer,
     {
-      signer: window.signer,
+      signer: window.signerConfig,
       application: window.application,
     },
     "signer",

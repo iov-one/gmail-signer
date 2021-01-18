@@ -11,7 +11,7 @@ export const onInitialize = async (mnemonic: string): Promise<Message> => {
       type: "SignerReady",
       data: undefined,
     };
-  } catch (error: any) {
+  } catch (error) {
     return {
       target: "Root",
       type: "Error",

@@ -385,4 +385,9 @@ export class Signer {
   public getElement = (): HTMLElement => {
     return this.sandbox;
   };
+
+  public hide(): void {
+    const { sandbox } = this;
+    sandbox.setAttribute("style", "display:none");
+  }
 }

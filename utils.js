@@ -55,7 +55,7 @@ const logAssetStats = (asset, columns) => {
     colorized(padded(name, columns[0], "right"), color),
     colorized(padded(toPrettySize(asset.size), columns[1], "right"), sizeColor),
     chunksColumnItems.join(" "),
-    chunkNames.join(" ")
+    chunkNames.join(" "),
   );
   console.log(line);
 };
@@ -80,7 +80,7 @@ const logHeader = (stats, columns) => {
     padded("Asset", columns[0], "right"),
     padded("Size", columns[1], "right"),
     padded("Chunks", columns[2]),
-    "Chunk Names"
+    "Chunk Names",
   );
   console.log(header);
 };
