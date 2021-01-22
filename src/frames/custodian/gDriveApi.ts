@@ -1,5 +1,10 @@
 import { CommonError } from "../../types/commonError";
-import { FilesData, isFileId, isMnemonicData } from "../../types/filesData";
+import {
+  FilesData,
+  isFileId,
+  isMnemonicData,
+  isMnemonicSavedData,
+} from "../../types/filesData";
 
 export namespace GDriveApi {
   interface Error {
@@ -41,7 +46,7 @@ export namespace GDriveApi {
   const getFileId = async (): Promise<string> => {
     const { accessToken } = window;
     const query: string[] = [
-      "name='mnemonic.txt'",
+      "name='mnemonic'",
       "appProperties has 'tag'",
       "appDataFolder in parents",
       "spaces=appDataFolder",
@@ -74,7 +79,23 @@ export namespace GDriveApi {
     }
   };
 
-  const handleSuccess = async (response: Response): Promise<string> => {
+  const handleSavedQuerySuccess = async (
+    response: Response,
+  ): Promise<string> => {
+    const filesData: FilesData = await response.json();
+    const { files } = filesData;
+    console.log(files);
+    if (files.length === 0) {
+      throw NotFoundError;
+    } else if (isMnemonicSavedData(files[0])) {
+      const { appProperties } = files[0];
+      return appProperties.saved;
+    }
+  };
+
+  const handleMnemonicQuerySuccess = async (
+    response: Response,
+  ): Promise<string> => {
     const filesData: FilesData = await response.json();
     const { files } = filesData;
     if (files.length === 0) {
@@ -96,7 +117,7 @@ export namespace GDriveApi {
   export const readMnemonic = async (): Promise<string> => {
     const { accessToken } = window;
     const query: string[] = [
-      "name='mnemonic.txt'",
+      "name='mnemonic'",
       "appProperties has 'tag'",
       "appDataFolder in parents",
       "spaces=appDataFolder",
@@ -115,7 +136,7 @@ export namespace GDriveApi {
     );
     switch (response.status) {
       case 200:
-        return handleSuccess(response);
+        return handleMnemonicQuerySuccess(response);
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());
@@ -138,10 +159,72 @@ export namespace GDriveApi {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: "mnemonic.txt",
+          name: "mnemonic",
           appProperties: {
             mnemonic: mnemonic,
             tag: "mnemonic",
+          },
+          parents: ["appDataFolder"],
+        }),
+      },
+    );
+    if (response.status !== 200) {
+      throw googleErrorToCommonError(await response.json());
+    }
+  };
+
+  export const isMnemonicSafelyStored = async (): Promise<boolean> => {
+    const { accessToken } = window;
+    const query: string[] = [
+      "name='saved'",
+      "appProperties has 'tag'",
+      "appDataFolder in parents",
+      "spaces=appDataFolder",
+      "fields=files(appProperties/saved)",
+      "orderBy=modifiedTime desc",
+      "pageSize=1",
+    ];
+    const response: Response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/?q=${query.join("&")}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `${accessToken.type} ${accessToken.token}`,
+        },
+      },
+    );
+    switch (response.status) {
+      case 200:
+        try {
+          return (await handleSavedQuerySuccess(response)) === "yes";
+        } catch (error) {
+          if (error === NotFoundError) {
+            return false;
+          } else {
+            throw error;
+          }
+        }
+      case 403:
+      case 401:
+        throw googleErrorToCommonError(await response.json());
+    }
+  };
+
+  export const setMnemonicSafelyStored = async (): Promise<void> => {
+    const { accessToken } = window;
+    const response: Response = await fetch(
+      "https://www.googleapis.com/drive/v3/files",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `${accessToken.type} ${accessToken.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "saved",
+          appProperties: {
+            saved: "yes",
+            tag: "saved",
           },
           parents: ["appDataFolder"],
         }),

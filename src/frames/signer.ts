@@ -29,7 +29,7 @@ const handleMessage = async (message: Message): Promise<Message | null> => {
           data.accountNumber,
           data.sequence,
         );
-      } catch (error: any) {
+      } catch (error) {
         return {
           target: "Root",
           type: "Error",
@@ -60,10 +60,14 @@ const onMessage = async (message: Message): Promise<void> => {
   }
 };
 
-window.onmessage = createMessageCallback(onMessage);
 // Entry point for the signer
 window.onload = (): void => {
   window.wallet = new Wallet();
+  // Announce initialization
+  window.postMessage("", location.origin);
+  // Attach the event listener
+  window.addEventListener("message", createMessageCallback(onMessage));
+  // Send the very first message
   sendMessage(parent, {
     target: "Root",
     type: "Sandboxed",

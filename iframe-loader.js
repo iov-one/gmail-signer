@@ -50,21 +50,19 @@ const compileTypescriptFile = async (filePath) => {
 
 const handleScripts = async (content) => {
   const document = cheerio.load(content);
-  const script = document("script");
+  const script = document('script[type="text/prs.typescript"]');
   // Wait to parse all the frames
-  if (script.attr("type") === "text/prs.typescript") {
-    const absolutePath = path.resolve(__dirname, script.attr("src"));
-    // Change the type of course
-    script.attr("type", "application/javascript");
-    // Compile typescript
-    const compiled = await compileTypescriptFile(absolutePath);
-    // Replace the src with a data uri
-    script.removeAttr("src");
-    // Write the script into the iframe, note that we don't
-    // want the library to escape anything so we use the text
-    // method
-    script.text(compiled.toString());
-  }
+  const absolutePath = path.resolve(__dirname, script.attr("src"));
+  // Compile typescript
+  const compiled = await compileTypescriptFile(absolutePath);
+  // Replace the src with a data uri
+  // script.removeAttr("src");
+  // Write the script into the iframe, note that we don't
+  // want the library to escape anything so we use the text
+  // method
+  script.replaceWith(
+    `<script type="text/javascript">${compiled.toString()}</script>`,
+  );
   return document;
 };
 
