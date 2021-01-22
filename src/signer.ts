@@ -2,6 +2,7 @@ import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 import { GoogleAuthInfo } from "types/gogoleAuthInfo";
 import * as uuid from "uuid";
 
+import { GDriveApi } from "./frames/custodian/gDriveApi";
 import content from "./templates/custodian.html";
 import { Application } from "./types/application";
 import { CommonError } from "./types/commonError";
@@ -98,6 +99,8 @@ export class Signer {
           this.setState(SignerState.SignedOut);
           break;
         case "SendAddress":
+        case "SendIsMnemonicSafelyStored":
+        case "SendShowMnemonicResult":
           this.forwardMessageToPromiseResolver(message);
           break;
         case "Error":
@@ -208,7 +211,7 @@ export class Signer {
     const { sandbox } = this;
     const uid: string = uuid.v4();
     return new Promise<T>(
-      (resolve: (address: T) => void, reject: (error: any) => void): void => {
+      (resolve: (value: T) => void, reject: (error: any) => void): void => {
         // Create a promise resolver that waits for responses
         // to this message
         //
@@ -270,7 +273,7 @@ export class Signer {
     };
     const onReady = (): void => {
       this.setState(SignerState.AuthenticatorReady);
-    }
+    };
     contentDocument.addEventListener("auth-started", onStarted);
     contentDocument.addEventListener("auth-succeeded", onSuccess);
     contentDocument.addEventListener("auth-failed", onFailure);
@@ -386,8 +389,24 @@ export class Signer {
     return this.sandbox;
   };
 
+  public async isMnemonicSafelyStored(): Promise<boolean> {
+    return this.sendMessageAndPromiseToRespond<boolean>({
+      target: "Custodian",
+      type: "GetIsMnemonicSafelyStored",
+      data: null,
+    });
+  }
+
   public hide(): void {
     const { sandbox } = this;
     sandbox.setAttribute("style", "display:none");
+  }
+
+  public showMnemonic(path: string): Promise<boolean> {
+    return this.sendMessageAndPromiseToRespond({
+      target: "Custodian",
+      type: "ShowMnemonic",
+      data: path,
+    });
   }
 }
