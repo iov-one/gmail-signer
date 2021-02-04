@@ -196,7 +196,7 @@ const transformGooglesResponse = (user: any): GoogleAuthInfo => {
 
 const main = (): void => {
   gapi.load("auth2", () => {
-    const target = document.getElementById("gdrive-custodian-sign-in-button");
+    const { button } = application;
     gapi.auth2
       .init({
         client_id: application.clientID,
@@ -225,9 +225,10 @@ const main = (): void => {
           }
         };
         if (!currentUser.isSignedIn()) {
-          auth2.attachClickHandler(target, {}, onSignedIn, onFailure);
+          auth2.attachClickHandler(button, {}, onSignedIn, onFailure);
         }
-        target.addEventListener("click", onClick, true);
+        button.addEventListener("click", onClick, true);
+        console.log("should be ready");
         document.dispatchEvent(new Event("auth-ready"));
       });
   });

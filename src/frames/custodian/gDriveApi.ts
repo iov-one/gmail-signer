@@ -84,7 +84,6 @@ export namespace GDriveApi {
   ): Promise<string> => {
     const filesData: FilesData = await response.json();
     const { files } = filesData;
-    console.log(files);
     if (files.length === 0) {
       throw NotFoundError;
     } else if (isMnemonicSavedData(files[0])) {

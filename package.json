@@ -1,6 +1,6 @@
 {
   "name": "@iov/gdrive-custodian",
-  "version": "0.9.12",
+  "version": "0.9.13",
   "description": "This package safely stores a mnemonic used for transaction signing on a user's GDrive.",
   "main": "lib/index.js",
   "scripts": {
@@ -37,6 +37,7 @@
     "webpack-cli": "^3.3.12"
   },
   "dependencies": {
+    "axios": "^0.21.1",
     "babel-loader": "^8.2.2"
   }
 }

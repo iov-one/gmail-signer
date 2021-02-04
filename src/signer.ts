@@ -2,7 +2,6 @@ import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 import { GoogleAuthInfo } from "types/gogoleAuthInfo";
 import * as uuid from "uuid";
 
-import { GDriveApi } from "./frames/custodian/gDriveApi";
 import content from "./templates/custodian.html";
 import { Application } from "./types/application";
 import { CommonError } from "./types/commonError";
@@ -297,7 +296,7 @@ export class Signer {
    *
    * @param rectangle
    */
-  public locateAt = (rectangle: DOMRect): void => {
+  /* public locateAt = (rectangle: DOMRect): void => {
     const { style } = this.sandbox;
     const zIndex: number = Number.MAX_SAFE_INTEGER;
 
@@ -308,7 +307,9 @@ export class Signer {
     style.width = rectangle.width + "px";
     // Right behind the button
     style.zIndex = zIndex.toString();
-  };
+  };*/
+
+  public signIn(): void {}
 
   /**
    * Set event listeners for the various types of events that are generated
