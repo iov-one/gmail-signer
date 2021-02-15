@@ -5,12 +5,11 @@ import {
   MsgSend,
   StdFee,
   StdSignature,
-  StdTx,
 } from "@cosmjs/launchpad";
-
-import { Message } from "../../../types/message";
-import { ModalEvents } from "../../../types/modalEvents";
-import { Modal } from "../../modal";
+import { Modal } from "modal";
+import { Message } from "types/message";
+import { ModalEvents } from "types/modalEvents";
+import { RootActions } from "types/rootActions";
 
 const ONE_MILLION = 1000000.0;
 
@@ -104,7 +103,7 @@ export const onSignTx = async (
   memo = "",
   accountNumber: number,
   sequenceNumber: number,
-): Promise<Message> => {
+): Promise<Message<RootActions, StdSignature | Error>> => {
   const { wallet } = window;
   const {
     authorization: { path },
@@ -112,7 +111,7 @@ export const onSignTx = async (
   const modal = new Modal();
   return new Promise(
     (
-      resolve: (message: Message) => void,
+      resolve: (message: Message<RootActions, StdSignature | Error>) => void,
       reject: (error: any) => void,
     ): void => {
       if (messages.some(isMsgSend)) {
@@ -181,8 +180,15 @@ export const onSignTx = async (
             .then((signature: StdSignature): void => {
               resolve({
                 target: "Root",
-                type: "SendSignedTx",
+                type: RootActions.SendSignature,
                 data: signature,
+              });
+            })
+            .catch((error: Error): void => {
+              resolve({
+                target: "Root",
+                type: RootActions.SendSignature,
+                data: error,
               });
             });
         });
@@ -193,8 +199,15 @@ export const onSignTx = async (
           .then((signature: StdSignature): void => {
             resolve({
               target: "Root",
-              type: "SendSignedTx",
+              type: RootActions.SendSignature,
               data: signature,
+            });
+          })
+          .catch((error: Error): void => {
+            resolve({
+              target: "Root",
+              type: RootActions.SendSignature,
+              data: error,
             });
           });
       }

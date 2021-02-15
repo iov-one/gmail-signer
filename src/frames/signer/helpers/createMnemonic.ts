@@ -1,6 +1,5 @@
 import { Secp256k1Wallet } from "@cosmjs/launchpad";
-
-import { parseHDPath } from "../parseHDPath";
+import { parseHDPath } from "frames/signer/helpers/parseHDPath";
 
 export const createMnemonic = async (): Promise<string> => {
   const wallet: Secp256k1Wallet = await Secp256k1Wallet.generate(

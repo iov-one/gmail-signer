@@ -1,10 +1,10 @@
-import { CommonError } from "../../types/commonError";
+import { CommonError } from "types/commonError";
 import {
   FilesData,
   isFileId,
   isMnemonicData,
   isMnemonicSavedData,
-} from "../../types/filesData";
+} from "types/filesData";
 
 export namespace GDriveApi {
   interface Error {

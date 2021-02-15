@@ -1,8 +1,9 @@
-import { Message } from "../../../types/message";
+import { Message } from "types/message";
+import { RootActions } from "types/rootActions";
 
-export const onSignOut = async (): Promise<Message | null> => {
+export const onSignOut = async (): Promise<Message<RootActions> | null> => {
   return {
     target: "Root",
-    type: "SignedOut",
+    type: RootActions.SignedOut,
   };
 };

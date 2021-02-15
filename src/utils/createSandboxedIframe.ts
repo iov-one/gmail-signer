@@ -1,6 +1,7 @@
+import { FRAME_CREATED_AND_LOADED } from "frames/constants";
+import { SignerConfig } from "signer";
 import { Application } from "types/application";
 
-import { SignerConfig } from "../signer";
 interface Config {
   readonly signer: SignerConfig;
   readonly application: Application;
@@ -21,37 +22,38 @@ export const createSandboxedIframe = async (
   // Now set it's content to the specified
   const { contentWindow, contentDocument } = frame;
   // Set global data
+  //
+  // It is important to do this before sandboxing
+  // the iframe, or it will not allow us to do it
   contentWindow.signerConfig = config.signer;
+  // Set attributes (like sandbox)
+  frame.setAttribute("sandbox", permissions.join(" "));
+  frame.setAttribute("id", "gdrive-custodian-" + key);
   contentWindow.application = config.application;
   // Write the html
   contentDocument.open();
   contentDocument.write(content);
   contentDocument.close();
-  return new Promise((resolve: (frame: HTMLIFrameElement) => void): void => {
-    const loaded = (event: MessageEvent): void => {
-      if (event.source !== contentWindow || event.origin !== location.origin) return;
-      // Remove the listener to keep it clean
-      contentWindow.removeEventListener("message", loaded);
-      /**
-       * The very first message is empty. It just notifies us
-       * that the window has loaded and we immediately remove the
-       * message listener
-       */
-      const { body } = contentDocument;
-      // Swallow mouse move events
-      const ignore = (event: MouseEvent): void => {
-        event.stopPropagation();
-        event.preventDefault();
+  return new Promise(
+    (
+      resolve: (frame: HTMLIFrameElement) => void,
+      reject: (reason: Error) => void,
+    ): void => {
+      const loaded = (): void => {
+        try {
+          // Remove the listener to keep it clean
+          contentWindow.removeEventListener(
+            FRAME_CREATED_AND_LOADED,
+            loaded,
+            true,
+          );
+          // Now we can export
+          resolve(frame);
+        } catch (error) {
+          reject(error);
+        }
       };
-      body.onmouseover = ignore;
-      body.onmouseenter = ignore;
-      body.onmousemove = ignore;
-      // Now sandbox it
-      frame.setAttribute("sandbox", permissions.join(" "));
-      frame.setAttribute("id", "gdrive-custodian-" + key);
-      // Now we can export
-      resolve(frame);
-    };
-    contentWindow.addEventListener("message", loaded);
-  });
+      contentWindow.addEventListener(FRAME_CREATED_AND_LOADED, loaded, true);
+    },
+  );
 };

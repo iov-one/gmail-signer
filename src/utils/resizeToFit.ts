@@ -15,7 +15,7 @@ const getOptimalSize = (element: HTMLElement): number[] => {
 const resizeAndCenter = (
   window: Window,
   width: number,
-  height: number
+  height: number,
 ): void => {
   const centerX: number = (screen.width - width) / 2;
   const centerY: number = (screen.height - height) / 2;

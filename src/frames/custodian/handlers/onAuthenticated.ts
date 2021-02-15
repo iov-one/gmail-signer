@@ -1,14 +1,18 @@
-import { Message } from "../../../types/message";
-import { createMnemonic } from "../../signer/helpers/createMnemonic";
-import { GDriveApi } from "../gDriveApi";
+import { GDriveApi } from "frames/custodian/gDriveApi";
+import { createMnemonic } from "frames/signer/helpers/createMnemonic";
+import { Message } from "types/message";
+import { SignerActions } from "types/signerActions";
 import NotFoundError = GDriveApi.NotFoundError;
 
-export const onAuthenticated = async (): Promise<Message | null> => {
+export const onAuthenticated = async (): Promise<Message<
+  SignerActions,
+  string
+> | null> => {
   try {
     const mnemonic: string = await GDriveApi.readMnemonic();
     return {
       target: "Signer",
-      type: "Initialize",
+      type: SignerActions.Initialize,
       data: mnemonic,
     };
   } catch (error) {
@@ -19,7 +23,7 @@ export const onAuthenticated = async (): Promise<Message | null> => {
       // Now we can return it
       return {
         target: "Signer",
-        type: "Initialize",
+        type: SignerActions.Initialize,
         data: mnemonic,
       };
     } else {

@@ -1,10 +1,11 @@
-import { Message } from "../../../types/message";
-import { GDriveApi } from "../gDriveApi";
+import { GDriveApi } from "frames/custodian/gDriveApi";
+import { Message } from "types/message";
+import { RootActions } from "types/rootActions";
 
-export const onAbandon = async (): Promise<Message | null> => {
+export const onAbandon = async (): Promise<Message<RootActions> | null> => {
   await GDriveApi.revokeToken();
   return {
     target: "Root",
-    type: "SignedOut",
+    type: RootActions.SignedOut,
   };
 };

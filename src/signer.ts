@@ -1,17 +1,33 @@
 import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
-import { GoogleAuthInfo } from "types/gogoleAuthInfo";
+import {
+  CUSTODIAN_AUTH_CONNECT_GAPI_EVENT,
+  CUSTODIAN_AUTH_EVENT,
+  CUSTODIAN_AUTH_FAILED_EVENT,
+  CUSTODIAN_AUTH_READY_EVENT,
+  CUSTODIAN_AUTH_STARTED_EVENT,
+  CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+} from "frames/constants";
+import content from "templates/custodian.html";
+import { Tx } from "type/tx";
+import { ActionType } from "types/actionType";
+import { Application } from "types/application";
+import { CommonError } from "types/commonError";
+import { CustodianActions } from "types/custodianActions";
+import { ErrorActions } from "types/errorActions";
+import { isGoogleAuthInfo } from "types/gogoleAuthInfo";
+import { GoogleAccessToken } from "types/googleAccessToken";
+import { isErrorMessage, Message } from "types/message";
+import { RootActions } from "types/rootActions";
+import { SignerActions } from "types/signerActions";
+import { createMessageCallback } from "utils/createMessageCallback";
+import { createSandboxedIframe } from "utils/createSandboxedIframe";
+import { isError } from "utils/isError";
+import { sendMessage } from "utils/sendMessage";
 import * as uuid from "uuid";
 
-import content from "./templates/custodian.html";
-import { Application } from "./types/application";
-import { CommonError } from "./types/commonError";
-import { GoogleAccessToken } from "./types/googleAccessToken";
-import { Message } from "./types/message";
-import { createMessageCallback } from "./utils/createMessageCallback";
-import { createSandboxedIframe } from "./utils/createSandboxedIframe";
-import { sendMessage } from "./utils/sendMessage";
-
 type EventHandler = (...args: any[]) => void;
+
+type StateChangeHandlerFn = (state: SignerState, data?: any) => void;
 
 export enum SignerState {
   Loading,
@@ -23,7 +39,6 @@ export enum SignerState {
   Authenticating,
   Failed,
   CancelledByUser,
-  AuthenticatorReady,
 }
 
 export interface SignerConfig {
@@ -43,7 +58,7 @@ interface PromiseResolver {
 
 export class Signer {
   private readonly signerConfig: SignerConfig;
-  private sandbox: HTMLIFrameElement = null;
+  private custodianFrame: HTMLIFrameElement = null;
   private googleConfig: Application | null = null;
   private resolvers: { [id: string]: PromiseResolver } = {};
   private eventHandlers: {
@@ -51,6 +66,10 @@ export class Signer {
   } = {
     [Events.StateChange]: undefined,
   };
+  private setAuthButtonReady: () => void = (): void => {};
+  private setAuthButtonNotInitialized: (
+    error: Error | string,
+  ) => void = (): void => {};
 
   constructor(config: SignerConfig) {
     this.signerConfig = config;
@@ -64,12 +83,15 @@ export class Signer {
    * @private
    */
   private setState = (state: SignerState): void => {
-    const handler: (readyState: SignerState, data?: any) => void = this
-      .eventHandlers[Events.StateChange];
-    if (handler !== undefined) {
-      // Call the handler for it
-      handler(state, undefined);
-    }
+    const handlers: ReadonlyArray<StateChangeHandlerFn | undefined> = [
+      this.eventHandlers[Events.StateChange],
+    ];
+    handlers.forEach((handler: StateChangeHandlerFn | undefined): void => {
+      if (handler !== undefined) {
+        // Call the handler for it
+        handler(state, undefined);
+      }
+    });
   };
 
   /**
@@ -80,30 +102,30 @@ export class Signer {
    * Note: This method is deliberately implemented as an arrow function
    *       because it needs to have a well defined "this" object
    */
-  private onMessageCallback = async (message: Message): Promise<void> => {
+  private onMessageCallback = (message: Message<RootActions>): void => {
     if (message.target !== "Root") {
       throw new Error("this type of message should never reach this window");
     } else {
       switch (message.type) {
-        case "Sandboxed":
+        case RootActions.Sandboxed:
           this.setState(SignerState.Sandboxed);
           break;
-        case "SignerReady":
+        case RootActions.SignerReady:
           this.setState(SignerState.SignerReady);
           break;
-        case "SendSignedTx":
-          this.forwardMessageToPromiseResolver(message);
-          break;
-        case "SignedOut":
+        case RootActions.SignedOut:
           this.setState(SignerState.SignedOut);
           break;
-        case "SendAddress":
-        case "SendIsMnemonicSafelyStored":
-        case "SendShowMnemonicResult":
+        case RootActions.SendSignature:
+        case RootActions.SendAddress:
+        case RootActions.SendIsMnemonicSafelyStored:
+        case RootActions.SendShowMnemonicResult:
           this.forwardMessageToPromiseResolver(message);
           break;
-        case "Error":
-          this.onError(message);
+        default:
+          if (isErrorMessage(message)) {
+            this.onError(message);
+          }
           break;
       }
     }
@@ -118,7 +140,7 @@ export class Signer {
    *
    * @private
    */
-  private onError = (message: Message): void => {
+  private onError = (message: Message<ErrorActions>): void => {
     const { uid } = message;
     if (uid !== undefined) {
       const resolver: PromiseResolver | undefined = this.getResolver(uid);
@@ -144,9 +166,13 @@ export class Signer {
   ): Promise<void> => {
     this.setState(SignerState.PreparingSigner);
     // Generate the message-promise
-    return this.sendMessageAndPromiseToRespond({
+    return this.sendMessageAndPromiseToRespond<
+      void,
+      CustodianActions,
+      GoogleAccessToken
+    >({
       target: "Custodian",
-      type: "Authenticated",
+      type: CustodianActions.Authenticated,
       data: accessToken,
     });
   };
@@ -176,7 +202,9 @@ export class Signer {
    * @param message
    * @private
    */
-  private forwardMessageToPromiseResolver = (message: Message): void => {
+  private forwardMessageToPromiseResolver = (
+    message: Message<RootActions>,
+  ): void => {
     const { uid } = message;
     if (uid === undefined) {
       console.warn(
@@ -204,10 +232,14 @@ export class Signer {
    *
    * @private
    */
-  private sendMessageAndPromiseToRespond = <T>(
-    message: Message,
+  private sendMessageAndPromiseToRespond = <
+    T,
+    A extends ActionType,
+    D = undefined
+  >(
+    message: Message<A, D>,
   ): Promise<T> => {
-    const { sandbox } = this;
+    const { custodianFrame } = this;
     const uid: string = uuid.v4();
     return new Promise<T>(
       (resolve: (value: T) => void, reject: (error: any) => void): void => {
@@ -220,7 +252,7 @@ export class Signer {
           resolve,
           reject,
         };
-        sendMessage(sandbox.contentWindow, {
+        sendMessage<A, D>(custodianFrame.contentWindow, {
           ...message,
           // With this we'll know to whom it goes
           uid: uid,
@@ -230,19 +262,69 @@ export class Signer {
   };
 
   /**
+   * Handle authentication events
+   * @param event The authentication event which is a custom event type that belongs to the
+   *        gdrive-custodian code
+   */
+  private onAuthEvent = (
+    event: CustomEvent<{ type: string; data: any }>,
+  ): void => {
+    const { detail: eventData } = event;
+    switch (eventData.type) {
+      case CUSTODIAN_AUTH_STARTED_EVENT:
+        this.setState(SignerState.Authenticating);
+        break;
+      case CUSTODIAN_AUTH_READY_EVENT:
+        window.addEventListener("message", this.onMessage);
+        // Resolve the pending promise if it's there
+        console.log("resolving the promise");
+        this.setAuthButtonReady();
+        break;
+      case CUSTODIAN_AUTH_SUCCEEDED_EVENT:
+        if (isGoogleAuthInfo(eventData.data)) {
+          const { accessToken } = eventData.data;
+          this.setState(SignerState.Authenticated);
+          // We do not need to wait for the result as this
+          // method will update the state according to the
+          // result of it's actions
+          void this.initializeWallet(accessToken);
+        }
+        break;
+      case CUSTODIAN_AUTH_FAILED_EVENT:
+        if (isError(eventData.data)) {
+          // FIXME: should do something with the error probably
+          this.setState(SignerState.Failed);
+          // reject(eventData.data);
+        } else if (typeof eventData.data === "string") {
+          if (eventData.data === "popup_closed_by_user") {
+            this.setState(SignerState.CancelledByUser);
+          } else {
+            this.setState(SignerState.Failed);
+          }
+          this.setAuthButtonNotInitialized(eventData.data);
+        } else {
+          console.warn("unknown failure message");
+        }
+        break;
+      case undefined:
+        break;
+      default:
+        this.setState(SignerState.Failed);
+    }
+  };
+
+  /**
    * This function initializes the whole flow that allows the user to authenticate with
    * Google and authorize the library to securely manage their mnemonic string
    *
-   * @param application Google's configuration for OAuth
+   * @param application Google's configuration for OAuth + a button to attach to the sign-in flow
    */
   public connect = async (application: Application): Promise<void> => {
     this.setState(SignerState.Loading);
-    // Listen to messages from the iframes before creating
-    // them, because the existence of one of them is the first
-    // message that is sent
-    window.addEventListener("message", this.onMessage);
+    // Export google config to the class level
+    this.googleConfig = application;
     // Create the custodian window
-    this.sandbox = await createSandboxedIframe(
+    this.custodianFrame = await createSandboxedIframe(
       content,
       {
         signer: this.signerConfig,
@@ -251,65 +333,31 @@ export class Signer {
       "custodian",
       document.body,
     );
-    const { contentDocument } = this.sandbox;
-    const onStarted = (): void => {
-      this.setState(SignerState.Authenticating);
-    };
-    const onFailure = (event: Event): void => {
-      const { detail: error } = event as CustomEvent;
-      if (error === "popup_closed_by_user") {
-        this.setState(SignerState.CancelledByUser);
-      } else {
-        this.setState(SignerState.Failed);
-      }
-    };
-    const onSuccess = (rawEvent: Event): void => {
-      const {
-        detail: { accessToken },
-      } = rawEvent as CustomEvent<GoogleAuthInfo>;
-      this.setState(SignerState.Authenticated);
-      this.initializeWallet(accessToken);
-    };
-    const onReady = (): void => {
-      this.setState(SignerState.AuthenticatorReady);
-    };
-    contentDocument.addEventListener("auth-started", onStarted);
-    contentDocument.addEventListener("auth-succeeded", onSuccess);
-    contentDocument.addEventListener("auth-failed", onFailure);
-    contentDocument.addEventListener("auth-ready", onReady);
-    // Export google config to the class level
-    this.googleConfig = application;
+    const { contentWindow } = this.custodianFrame;
+    // Start listening on the authentication events
+    contentWindow.addEventListener(CUSTODIAN_AUTH_EVENT, this.onAuthEvent);
+    // Now create a promise so that the caller can await on it
+    return new Promise(
+      (resolve: () => void, reject: (error: Error) => void): void => {
+        this.setAuthButtonNotInitialized = reject;
+        this.setAuthButtonReady = resolve;
+        // We are ready right now
+        contentWindow.dispatchEvent(
+          new Event(CUSTODIAN_AUTH_CONNECT_GAPI_EVENT),
+        );
+      },
+    );
   };
 
   private disconnect = (): void => {
     const parent: HTMLElement = document.body;
     if (parent !== null) {
       // Remove the iframe from the body of the document
-      parent.removeChild(this.sandbox);
+      parent.removeChild(this.custodianFrame);
     }
     // Remove listeners
     window.removeEventListener("message", this.onMessage);
   };
-
-  /**
-   * Locates and resizes the iframe in the specified rectangle
-   *
-   * @param rectangle
-   */
-  /* public locateAt = (rectangle: DOMRect): void => {
-    const { style } = this.sandbox;
-    const zIndex: number = Number.MAX_SAFE_INTEGER;
-
-    style.position = "fixed";
-    style.top = rectangle.top + "px";
-    style.height = rectangle.height + "px";
-    style.left = rectangle.left + "px";
-    style.width = rectangle.width + "px";
-    // Right behind the button
-    style.zIndex = zIndex.toString();
-  };*/
-
-  public signIn(): void {}
 
   /**
    * Set event listeners for the various types of events that are generated
@@ -339,7 +387,7 @@ export class Signer {
   /**
    * This methods should be used to close Google's session
    */
-  public signOut = async (): Promise<void> => {
+  public signOut = (): void => {
     this.disconnect();
   };
 
@@ -348,9 +396,9 @@ export class Signer {
    * key
    */
   public getAddress = (): Promise<string> => {
-    return this.sendMessageAndPromiseToRespond<string>({
+    return this.sendMessageAndPromiseToRespond<string, SignerActions>({
       target: "Signer",
-      type: "GetAddress",
+      type: SignerActions.GetAddress,
     });
   };
 
@@ -372,41 +420,39 @@ export class Signer {
     accountNumber: string,
     sequence: string,
   ): Promise<StdSignature> => {
-    return this.sendMessageAndPromiseToRespond<StdSignature>({
-      target: "Signer",
-      type: "SignTx",
-      data: {
-        messages: messages,
-        fee: fee,
-        chainId: chainId,
-        memo: memo,
-        accountNumber: accountNumber,
-        sequence: sequence,
+    const tx: Tx = {
+      messages: messages,
+      fee: fee,
+      chainId: chainId,
+      memo: memo,
+      accountNumber: accountNumber,
+      sequence: sequence,
+    };
+    return this.sendMessageAndPromiseToRespond<StdSignature, SignerActions, Tx>(
+      {
+        target: "Signer",
+        type: SignerActions.SignTx,
+        data: tx,
       },
-    });
-  };
-
-  public getElement = (): HTMLElement => {
-    return this.sandbox;
+    );
   };
 
   public async isMnemonicSafelyStored(): Promise<boolean> {
-    return this.sendMessageAndPromiseToRespond<boolean>({
+    return this.sendMessageAndPromiseToRespond<boolean, CustodianActions>({
       target: "Custodian",
-      type: "GetIsMnemonicSafelyStored",
+      type: CustodianActions.GetIsMnemonicSafelyStored,
       data: null,
     });
   }
 
-  public hide(): void {
-    const { sandbox } = this;
-    sandbox.setAttribute("style", "display:none");
-  }
-
   public showMnemonic(path: string): Promise<boolean> {
-    return this.sendMessageAndPromiseToRespond({
+    return this.sendMessageAndPromiseToRespond<
+      boolean,
+      CustodianActions,
+      string
+    >({
       target: "Custodian",
-      type: "ShowMnemonic",
+      type: CustodianActions.ShowMnemonic,
       data: path,
     });
   }

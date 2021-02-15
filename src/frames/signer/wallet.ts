@@ -6,8 +6,7 @@ import {
   StdFee,
   StdSignature,
 } from "@cosmjs/launchpad";
-
-import { parseHDPath } from "./parseHDPath";
+import { parseHDPath } from "frames/signer/helpers/parseHDPath";
 
 export class Wallet {
   private wallet: Secp256k1Wallet | null = null;

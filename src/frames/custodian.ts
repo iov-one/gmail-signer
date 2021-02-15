@@ -1,39 +1,46 @@
-import { GDriveApi } from "../frames/custodian/gDriveApi";
-import { Modal } from "../frames/modal";
-import { SignerConfig } from "../signer";
-import signer from "../templates/signer.html";
-import { Application } from "../types/application";
-import { GoogleAuthInfo } from "../types/gogoleAuthInfo";
-import { GoogleAccessToken } from "../types/googleAccessToken";
-import { Message } from "../types/message";
-import { ModalEvents } from "../types/modalEvents";
-import { createMessageCallback } from "../utils/createMessageCallback";
-import { createSandboxedIframe } from "../utils/createSandboxedIframe";
-import { sendMessage } from "../utils/sendMessage";
-import { onAbandon } from "./custodian/handlers/onAbandon";
-import { onAuthenticated } from "./custodian/handlers/onAuthenticated";
-import { onDeleteAccount } from "./custodian/handlers/onDeleteAccount";
-import { onSignOut } from "./custodian/handlers/onSignOut";
-import { ChildContainer } from "./signer/childContainer";
+import "3rdParty/gapi";
 
-const CHILD_CONTAINER: ChildContainer = new ChildContainer();
-
-declare global {
-  interface Window {
-    accessToken: GoogleAccessToken;
-    signerConfig: SignerConfig;
-    application: Application;
-    gapi: any /* Google API */;
-  }
-}
-
-const { gapi, application } = window;
+import {
+  CUSTODIAN_AUTH_CONNECT_GAPI_EVENT,
+  CUSTODIAN_AUTH_EVENT,
+  CUSTODIAN_AUTH_FAILED_EVENT,
+  CUSTODIAN_AUTH_READY_EVENT,
+  CUSTODIAN_AUTH_STARTED_EVENT,
+  CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+  FRAME_CREATED_AND_LOADED,
+} from "frames/constants";
+import { GDriveApi } from "frames/custodian/gDriveApi";
+import { onAbandon } from "frames/custodian/handlers/onAbandon";
+import { onAuthenticated } from "frames/custodian/handlers/onAuthenticated";
+import { onDeleteAccount } from "frames/custodian/handlers/onDeleteAccount";
+import { onSignOut } from "frames/custodian/handlers/onSignOut";
+import { Modal } from "modal";
+import signer from "templates/signer.html";
+import { AuthEventDetail } from "type/authEventDetail";
+import { Auth2, GoogleApi, GoogleApiUser } from "type/googleApi";
+import { ActionType } from "types/actionType";
+import { CustodianActions } from "types/custodianActions";
+import { ErrorActions } from "types/errorActions";
+import { GoogleAuthInfo } from "types/gogoleAuthInfo";
+import { GoogleAccessToken } from "types/googleAccessToken";
+import {
+  isCustodianMessage,
+  isRootMessage,
+  isSignerMessage,
+  Message,
+} from "types/message";
+import { ModalEvents } from "types/modalEvents";
+import { RootActions } from "types/rootActions";
+import { SignerActions } from "types/signerActions";
+import { createMessageCallback } from "utils/createMessageCallback";
+import { createSandboxedIframe } from "utils/createSandboxedIframe";
+import { sendMessage } from "utils/sendMessage";
 
 const showMnemonic = async (path: string): Promise<boolean> => {
   const modal = new Modal();
   const mnemonic = await GDriveApi.readMnemonic();
   return new Promise(
-    (resolve: (value: boolean) => void, reject: (error: any) => void) => {
+    (resolve: (value: boolean) => void, reject: (error: Error) => void) => {
       modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
         const items: NodeListOf<Element> = document.querySelectorAll(
           "[data-key]",
@@ -53,103 +60,222 @@ const showMnemonic = async (path: string): Promise<boolean> => {
         modal.close();
       });
       modal.on(ModalEvents.Accepted, (): void => {
-        GDriveApi.setMnemonicSafelyStored();
-        resolve(true);
-        modal.close();
+        GDriveApi.setMnemonicSafelyStored()
+          .then((): void => {
+            resolve(true);
+          })
+          .catch((): void => {
+            reject(
+              new Error(
+                "an error has occurred when attempting to call a google api",
+              ),
+            );
+          })
+          .finally((): void => {
+            modal.close();
+          });
       });
       modal.open(path, "signer::authorize-signature", 600, 400);
     },
   );
 };
 
-const handleMessage = async (message: Message): Promise<Message | null> => {
-  const { data } = message;
+const handleMessage = async (
+  message: Message<CustodianActions>,
+): Promise<Message<
+  RootActions | ErrorActions | SignerActions,
+  Error | boolean | string
+> | null> => {
   switch (message.type) {
-    case "Authenticated":
-      window.accessToken = data;
+    case CustodianActions.Authenticated:
+      window.accessToken = message.data as GoogleAccessToken;
       try {
         return await onAuthenticated();
       } catch (error) {
         window.accessToken = null;
         return {
           target: "Root",
-          type: "Error",
-          data: error,
+          type: ErrorActions.Forwarded,
+          data: error as Error,
         };
       }
-    case "ShowMnemonic":
+    case CustodianActions.ShowMnemonic:
       return {
         target: "Root",
-        type: "SendShowMnemonicResult",
-        data: await showMnemonic(data),
+        type: RootActions.SendShowMnemonicResult,
+        data: await showMnemonic(message.data),
       };
-    case "GetIsMnemonicSafelyStored":
+    case CustodianActions.GetIsMnemonicSafelyStored:
       return {
         target: "Root",
-        type: "SendIsMnemonicSafelyStored",
+        type: RootActions.SendIsMnemonicSafelyStored,
         data: await GDriveApi.isMnemonicSafelyStored(),
       };
-    case "DeleteAccount":
+    case CustodianActions.DeleteAccount:
       return onDeleteAccount();
-    case "SignOut":
+    case CustodianActions.SignOut:
       return onSignOut();
-    case "Abandon":
+    case CustodianActions.Abandon:
       return onAbandon();
-    default:
-      console.warn("unknown message: " + message.type);
   }
 };
 
-const onSignerMessage = async (message: Message): Promise<void> => {
-  const { child } = CHILD_CONTAINER;
-  // This message belongs to the child frame, so
-  // we must redirect it
-  if (child === null) {
+const onSignerMessage = (message: Message<SignerActions>): void => {
+  if (frames.length === 0) {
     throw new Error("cannot forward this message, not initialized properly");
   }
   // Send as is, we don't want to use this
-  return sendMessage(child.contentWindow, message);
+  return sendMessage(frames[0], message);
 };
 
-const onCustodianMessage = async (message: Message): Promise<void> => {
-  const { child } = CHILD_CONTAINER;
-  const response: Message | null = await handleMessage(message);
+const onCustodianMessage = async (
+  message: Message<CustodianActions>,
+): Promise<void> => {
+  const response: Message<
+    RootActions | SignerActions | ErrorActions,
+    Error | boolean | string
+  > | null = await handleMessage(message);
   if (response !== null) {
-    if (response.target === "Signer") {
-      sendMessage(child.contentWindow, {
-        ...response,
-        // Overwrite the uid to let the sender know
-        // this was their original message if the want
-        // or need to
-        uid: message.uid,
-      });
-    } else if (response.target === "Root") {
-      sendMessage(parent, {
-        ...response,
-        // Overwrite the uid to let the sender know
-        // this was their original message if the want
-        // or need to
-        uid: message.uid,
-      });
-    } else {
-      throw new Error(
-        "sorry, I don't know this target: `" + response.target + "'",
+    const targetWindow: Window | undefined =
+      response.target === "Signer" ? frames[0] : parent;
+    if (targetWindow === undefined) {
+      console.warn(
+        "cannot forward message to signer because there's no window to send it to",
       );
+    } else {
+      sendMessage(targetWindow, {
+        ...response,
+        // Overwrite the uid to let the sender know
+        // this was their original message if the want
+        // or need to
+        uid: message.uid,
+      });
     }
   }
 };
 
-const onMessage = async (message: Message): Promise<void> => {
+const onRootMessage = (message: Message<RootActions>): void =>
+  sendMessage(parent, message);
+
+const onMessage = (message: Message<ActionType>): Promise<void> | void => {
   switch (message.target) {
     case "Custodian":
-      return onCustodianMessage(message);
+      if (isCustodianMessage(message)) {
+        return onCustodianMessage(message);
+      }
+      break;
     case "Signer":
-      return onSignerMessage(message);
+      if (isSignerMessage(message)) {
+        return onSignerMessage(message);
+      }
+      break;
     case "Root":
-      return sendMessage(parent, message);
+      if (isRootMessage(message)) {
+        return onRootMessage(message);
+      }
+      break;
     default:
-      throw new Error("unknown message type cannot be handled");
+      console.warn("unknown type of message received");
   }
+};
+
+const transformGooglesResponse = (user: GoogleApiUser): GoogleAuthInfo => {
+  const profile = user.getBasicProfile();
+  const auth = user.getAuthResponse(true);
+  const { scope } = auth;
+  return {
+    accessToken: {
+      token: auth.access_token,
+      expiresAt: Number(auth.expires_at),
+      idToken: auth.id_token,
+      type: auth.token_type,
+      scope: scope.split(" "),
+    },
+    user: {
+      firstName: profile.getGivenName(),
+      lastName: profile.getFamilyName(),
+      email: profile.getEmail(),
+      picture: profile.getImageUrl(),
+    },
+  };
+};
+
+const gapi = window.gapi as GoogleApi;
+
+const onAuth2Initialized = (auth2: Auth2): void => {
+  const { application } = window;
+  const { button } = application;
+  const currentUser = auth2.currentUser.get();
+  const onSignedIn = (user: GoogleApiUser): void => {
+    window.dispatchEvent(
+      new CustomEvent<AuthEventDetail<GoogleAuthInfo>>(CUSTODIAN_AUTH_EVENT, {
+        detail: {
+          type: CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+          data: transformGooglesResponse(user),
+        },
+      }),
+    );
+  };
+  const onFailure = (error: Error): void => {
+    window.dispatchEvent(
+      new CustomEvent<AuthEventDetail<Error>>(CUSTODIAN_AUTH_EVENT, {
+        detail: {
+          type: CUSTODIAN_AUTH_FAILED_EVENT,
+          data: error,
+        },
+      }),
+    );
+  };
+  const onClick = (): void => {
+    window.dispatchEvent(
+      new CustomEvent<AuthEventDetail>(CUSTODIAN_AUTH_EVENT, {
+        detail: {
+          type: CUSTODIAN_AUTH_STARTED_EVENT,
+        },
+      }),
+    );
+    if (currentUser.isSignedIn()) {
+      onSignedIn(currentUser);
+    }
+  };
+  if (!currentUser.isSignedIn()) {
+    auth2.attachClickHandler(button, {}, onSignedIn, onFailure);
+  }
+  button.addEventListener("click", onClick, true);
+  // Now we are ready for the button to be clicked
+  window.dispatchEvent(
+    new CustomEvent<AuthEventDetail>(CUSTODIAN_AUTH_EVENT, {
+      detail: {
+        type: CUSTODIAN_AUTH_READY_EVENT,
+      },
+    }),
+  );
+  // Attach the event listener
+  window.addEventListener("message", createMessageCallback(onMessage));
+};
+
+const setupSignInButton = (): void => {
+  const { application } = window;
+  const config = {
+    client_id: application.clientID,
+    scope: "https://www.googleapis.com/auth/drive.appdata",
+  };
+  gapi.auth2
+    .init(config)
+    .then(onAuth2Initialized)
+    .catch((): void => {
+      window.dispatchEvent(
+        new CustomEvent<Error>(CUSTODIAN_AUTH_FAILED_EVENT, {
+          detail: new Error("failed to initialize the google auth2 library"),
+        }),
+      );
+    });
+};
+
+const onConnectGApi = (): void => {
+  window.removeEventListener(CUSTODIAN_AUTH_CONNECT_GAPI_EVENT, onConnectGApi);
+  // Initialize google auth api
+  gapi.load("auth2", setupSignInButton);
 };
 
 window.onload = (): void => {
@@ -161,77 +287,14 @@ window.onload = (): void => {
     },
     "signer",
   )
-    .then((frame: HTMLIFrameElement): void => {
-      CHILD_CONTAINER.child = frame;
+    .then((): void => {
       // Announce initialization
-      window.postMessage("", location.origin);
-      // Attach the event listener
-      window.addEventListener("message", createMessageCallback(onMessage));
+      window.dispatchEvent(new Event(FRAME_CREATED_AND_LOADED));
+      // When the signer object is ready to listen to our messages
+      // it will let us know
+      window.addEventListener(CUSTODIAN_AUTH_CONNECT_GAPI_EVENT, onConnectGApi);
     })
     .catch((error: any): void => {
       console.warn(error);
     });
 };
-
-const transformGooglesResponse = (user: any): GoogleAuthInfo => {
-  const profile = user.getBasicProfile();
-  const auth = user.getAuthResponse(true);
-  return {
-    accessToken: {
-      token: auth.access_token,
-      expiresAt: auth.expires_at,
-      idToken: auth.id_token,
-      type: auth.token_type,
-      scope: auth.scope,
-      state: undefined,
-    },
-    user: {
-      firstName: profile.getGivenName(),
-      lastName: profile.getFamilyName(),
-      email: profile.getEmail(),
-      picture: profile.getImageUrl(),
-    },
-  };
-};
-
-const main = (): void => {
-  gapi.load("auth2", () => {
-    const { button } = application;
-    gapi.auth2
-      .init({
-        client_id: application.clientID,
-        scope: "https://www.googleapis.com/auth/drive.appdata",
-      })
-      .then((auth2: any): void => {
-        const currentUser = auth2.currentUser.get();
-        const onSignedIn = (user: any): void => {
-          document.dispatchEvent(
-            new CustomEvent("auth-succeeded", {
-              detail: transformGooglesResponse(user),
-            }),
-          );
-        };
-        const onFailure = (error: any): void => {
-          document.dispatchEvent(
-            new CustomEvent("auth-failed", {
-              detail: error,
-            }),
-          );
-        };
-        const onClick = (): void => {
-          document.dispatchEvent(new Event("auth-started"));
-          if (currentUser.isSignedIn()) {
-            onSignedIn(currentUser);
-          }
-        };
-        if (!currentUser.isSignedIn()) {
-          auth2.attachClickHandler(button, {}, onSignedIn, onFailure);
-        }
-        button.addEventListener("click", onClick, true);
-        console.log("should be ready");
-        document.dispatchEvent(new Event("auth-ready"));
-      });
-  });
-};
-
-main();

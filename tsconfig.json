@@ -7,9 +7,22 @@
       "ES2015",
       "DOM"
     ],
+    "esModuleInterop": true,
     "sourceMap": true,
     "declaration": true,
     "outDir": "lib",
-    "baseUrl": "src"
-  }
+    "baseUrl": "src",
+    "paths": {
+      "frames/*": ["./frames/*"],
+      "type/*": ["./types/*"],
+      "templates/*": ["./templates/*"],
+      "utils/*": ["./utils/*"],
+      "signer": ["./signer"],
+      "window": ["./window"],
+      "3rdparty/*": ["./3rdparty/*"]
+    }
+  },
+  "include": [
+    "./src/**/*"
+  ]
 }

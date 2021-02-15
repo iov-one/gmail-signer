@@ -1,6 +1,6 @@
-import { ModalEvents } from "../../types/modalEvents";
-import { toWindowOptions } from "../../utils/helpers";
-import { setWindowCloseHandler } from "../../utils/setWindowCloseHandler";
+import { ModalEvents } from "types/modalEvents";
+import { toWindowOptions } from "utils/helpers";
+import { setWindowCloseHandler } from "utils/setWindowCloseHandler";
 
 type GenericCallback = (...args: any[]) => void;
 

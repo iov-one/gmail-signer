@@ -1,6 +1,10 @@
-import { Message } from "../../../types/message";
+import { ErrorActions } from "types/errorActions";
+import { Message } from "types/message";
+import { RootActions } from "types/rootActions";
 
-export const onInitialize = async (mnemonic: string): Promise<Message> => {
+export const onInitialize = async (
+  mnemonic: string,
+): Promise<Message<RootActions | ErrorActions>> => {
   const { wallet } = window;
   // Now we can initialize the wallet
   try {
@@ -8,13 +12,13 @@ export const onInitialize = async (mnemonic: string): Promise<Message> => {
     await wallet.initialize(mnemonic, "m/44'/234'/0'/0/0", "star");
     return {
       target: "Root",
-      type: "SignerReady",
+      type: RootActions.SignerReady,
       data: undefined,
     };
   } catch (error) {
     return {
       target: "Root",
-      type: "Error",
+      type: ErrorActions.InitializationFailed,
       data: error,
     };
   }
