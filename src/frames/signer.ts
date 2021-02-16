@@ -94,11 +94,8 @@ window.onload = (): void => {
   window.wallet = new Wallet();
   // Announce initialization
   window.dispatchEvent(new Event(FRAME_CREATED_AND_LOADED));
-  // Since we do not want to get the previous message at all
-  setTimeout((): void => {
-    // Attach the event listener
-    window.addEventListener("message", createMessageCallback(onMessage));
-  }, 0);
+  // Attach the event listener
+  window.addEventListener("message", createMessageCallback(onMessage));
   // Send the very first message to the parent window
   sendMessage(parent, {
     target: "Root",

@@ -4,7 +4,7 @@ const toPrettySize = (value) => {
   if (value < 1000) {
     return `${value} bytes`.padStart(10, " ");
   } else if (value < 1000000) {
-    return `${(value / 1024, 2).toFixed(2)} KiB`.padStart(10, " ");
+    return `${(value / 1024).toFixed(2)} KiB`.padStart(10, " ");
   } else if (value < 1000000000) {
     return `${(value / 1024 / 1024).toFixed(2)} MiB`.padStart(10, " ");
   }

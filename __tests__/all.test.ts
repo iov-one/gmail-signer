@@ -1,87 +1,55 @@
-import { AttachClickHandlerOptions, gapi } from "../src/gapi";
+import "../src/3rdParty/gapi";
 import { Events, Signer, SignerState } from "../lib";
-
-class AuthMock implements gapi.GoogleAuth {
-  readonly currentUser: gapi.GoogleUser;
-
-  attachClickHandler(
-    button: HTMLElement,
-    options: AttachClickHandlerOptions,
-    success: (user: gapi.GoogleUser) => void,
-    failure: (reason: string) => void,
-  ): void {
-    console.log("attaching click ")
-  }
-
-  public init(config: {
-    client_id: string;
-    scope: string;
-  }): Promise<gapi.GoogleAuth> {
-    console.log("initialized auth object");
-    return Promise.resolve(this);
-  }
-}
-
-class GoogleMock implements gapi.Google {
-  public load(lib: string, options: any): void {
-    console.log(`loading ${lib}`);
-  }
-
-  readonly auth2: gapi.GoogleAuth = new AuthMock();
-}
-
-declare global {
-  interface Window {
-    gapi: gapi.Google;
-  }
-}
-
 
 describe("All features work", () => {
   let signer: Signer;
-  let button: HTMLButtonElement;
   let state: SignerState;
-
-  beforeAll((): void => {
-    const { body } = document;
-    window.gapi = new GoogleMock();
-    button = document.createElement("button");
-    body.appendChild(button);
-  });
+  let button: HTMLButtonElement;
 
   const eventHandler = (newState: SignerState): void => {
     state = newState;
   };
 
-  it("Correctly creates the signer object", (): void => {
+  beforeAll((): void => {
+    const { body } = document;
+    button = document.createElement("button");
+    // Create the signer
     signer = new Signer({
       authorization: {
         path: "",
       },
     });
-  });
-
-  it("Subscribes to the events", (): void => {
-    // Append it to the document
+    // Connect the event handler
     signer.on(Events.StateChange, eventHandler);
+    // The button must be in the body of the document
+    body.appendChild(button);
   });
 
-  it("Connects and attaches the button", (done: (
-    error?: Error,
-  ) => void): void => {
-    const loadSpy = jest.spyOn(window.gapi, "load");
-    signer
-      .connect({
-        clientID:
-          "759323103801-65vnghmgg12pass7ef7f34ajjcgp57nd.apps.googleusercontent.com",
-        button: button,
-      })
-      .then((): void => {
-        signer.disconnect();
-        done();
-      })
-      .catch((error: any): void => {
-        done(error);
-      });
+  afterAll((): void => {
+    signer.off(Events.StateChange);
+    console.log("Cool");
+  });
+
+  it("Connects and attaches the button", async (): Promise<void> => {
+    const promise: Promise<void> = signer.connect({
+      clientID:
+        "759323103801-65vnghmgg12pass7ef7f34ajjcgp57nd.apps.googleusercontent.com",
+      button: button,
+    });
+    expect(state).toEqual(SignerState.Loading);
+    await expect(promise).resolves.toBeUndefined();
+    expect(state).toEqual(SignerState.ReadyToSignIn);
+  });
+
+  it("Contains the custodian iframe", (): void => {
+    const frames: HTMLCollectionOf<HTMLIFrameElement> = document.getElementsByTagName(
+      "iframe",
+    );
+    expect(frames).toHaveLength(1);
+    expect(frames[0].id).toEqual("gdrive-custodian-custodian");
+  });
+
+  it("Disconnects and stops listening", (): void => {
+    signer.signOut();
   });
 });

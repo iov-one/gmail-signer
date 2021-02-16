@@ -31,6 +31,7 @@ type StateChangeHandlerFn = (state: SignerState, data?: any) => void;
 
 export enum SignerState {
   Loading,
+  ReadyToSignIn,
   Sandboxed,
   Authenticated,
   PreparingSigner,
@@ -281,11 +282,14 @@ export class Signer {
       case CUSTODIAN_AUTH_SUCCEEDED_EVENT:
         if (isGoogleAuthInfo(eventData.data)) {
           const { accessToken } = eventData.data;
-          this.setState(SignerState.Authenticated);
-          // We do not need to wait for the result as this
-          // method will update the state according to the
-          // result of it's actions
-          void this.initializeWallet(accessToken);
+          this.initializeWallet(accessToken)
+            .then((): void => {
+              this.setState(SignerState.Authenticated);
+            })
+            .catch((error: any): void => {
+              console.error(error);
+              this.setState(SignerState.Failed);
+            });
         }
         break;
       case CUSTODIAN_AUTH_FAILED_EVENT:
@@ -337,7 +341,9 @@ export class Signer {
       // Start listening on the authentication events
       contentWindow.addEventListener(CUSTODIAN_AUTH_EVENT, this.onAuthEvent);
       // Call the window specialized initializer
-      return contentWindow.initialize();
+      await contentWindow.initialize();
+      // Reset the state now
+      this.setState(SignerState.ReadyToSignIn);
     }
   };
 

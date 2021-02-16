@@ -65,12 +65,14 @@ export namespace GDriveApi {
     );
     switch (response.status) {
       case 200:
-        const filesData: FilesData = await response.json();
-        const { files } = filesData;
-        if (files.length === 0) {
-          throw NotFoundError;
-        } else if (isFileId(files[0])) {
-          return files[0].id;
+        {
+          const filesData = (await response.json()) as FilesData;
+          const { files } = filesData;
+          if (files.length === 0) {
+            throw NotFoundError;
+          } else if (isFileId(files[0])) {
+            return files[0].id;
+          }
         }
         break;
       case 403:
@@ -82,7 +84,7 @@ export namespace GDriveApi {
   const handleSavedQuerySuccess = async (
     response: Response,
   ): Promise<string> => {
-    const filesData: FilesData = await response.json();
+    const filesData = (await response.json()) as FilesData;
     const { files } = filesData;
     if (files.length === 0) {
       throw NotFoundError;
@@ -95,7 +97,7 @@ export namespace GDriveApi {
   const handleMnemonicQuerySuccess = async (
     response: Response,
   ): Promise<string> => {
-    const filesData: FilesData = await response.json();
+    const filesData = (await response.json()) as FilesData;
     const { files } = filesData;
     if (files.length === 0) {
       throw NotFoundError;

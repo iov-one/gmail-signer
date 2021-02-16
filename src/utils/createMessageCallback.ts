@@ -4,7 +4,7 @@ import { isMessage, Message } from "types/message";
 export const createMessageCallback = <T extends ActionType>(
   handleMessage: (message: Message<T>) => void | Promise<void>,
 ): ((event: MessageEvent) => void) => {
-  const onEvent = (event: MessageEvent): void | Promise<void> => {
+  return (event: MessageEvent): void | Promise<void> => {
     if (event.origin !== location.origin) return;
     if (event.source === window) {
       // Messages from the same context are not allowed
@@ -16,5 +16,4 @@ export const createMessageCallback = <T extends ActionType>(
       return handleMessage(data);
     }
   };
-  return onEvent;
 };

@@ -9,7 +9,9 @@ export interface GoogleAuthInfo {
   readonly user: GoogleUser;
 }
 
-export const isGoogleAuthInfo = (value: any): value is GoogleAuthInfo => {
+export const isGoogleAuthInfo = (
+  value: any | GoogleAuthInfo,
+): value is GoogleAuthInfo => {
   if (!("accessToken" in value)) return false;
   if (!("user" in value)) return false;
   const authInfo = value as GoogleAuthInfo;

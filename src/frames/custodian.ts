@@ -193,7 +193,7 @@ const setupAuthButton = (auth2: gapi.GoogleAuth): void => {
 
 const google = window.gapi as gapi.Google;
 
-window.initialize = async (): Promise<void> => {
+window.initialize = (): Promise<void> => {
   return new Promise(
     (resolve: () => void, reject: (error: Error | string) => void): void => {
       const { userAgent } = navigator;
