@@ -1,10 +1,8 @@
 import "3rdParty/gapi";
 
 import {
-  CUSTODIAN_AUTH_CONNECT_GAPI_EVENT,
   CUSTODIAN_AUTH_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
-  CUSTODIAN_AUTH_READY_EVENT,
   CUSTODIAN_AUTH_STARTED_EVENT,
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   FRAME_CREATED_AND_LOADED,
@@ -14,11 +12,11 @@ import { onAbandon } from "frames/custodian/handlers/onAbandon";
 import { onAuthenticated } from "frames/custodian/handlers/onAuthenticated";
 import { onDeleteAccount } from "frames/custodian/handlers/onDeleteAccount";
 import { onSignOut } from "frames/custodian/handlers/onSignOut";
-import { Modal } from "modal";
+import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
+import { gapi } from "gapi";
 import signer from "templates/signer.html";
-import { AuthEventDetail } from "type/authEventDetail";
-import { Auth2, GoogleApi, GoogleApiUser } from "type/googleApi";
 import { ActionType } from "types/actionType";
+import { AuthEventDetail } from "types/authEventDetail";
 import { CustodianActions } from "types/custodianActions";
 import { ErrorActions } from "types/errorActions";
 import { GoogleAuthInfo } from "types/gogoleAuthInfo";
@@ -29,56 +27,11 @@ import {
   isSignerMessage,
   Message,
 } from "types/message";
-import { ModalEvents } from "types/modalEvents";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { createSandboxedIframe } from "utils/createSandboxedIframe";
 import { sendMessage } from "utils/sendMessage";
-
-const showMnemonic = async (path: string): Promise<boolean> => {
-  const modal = new Modal();
-  const mnemonic = await GDriveApi.readMnemonic();
-  return new Promise(
-    (resolve: (value: boolean) => void, reject: (error: Error) => void) => {
-      modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
-        const items: NodeListOf<Element> = document.querySelectorAll(
-          "[data-key]",
-        );
-        const words = mnemonic.split(/\s+/);
-        items.forEach((item: Element): void => {
-          const key: string = item.getAttribute("data-key");
-          if (key.startsWith("word-")) {
-            const index = Number(key.replace("word-", ""));
-            item.appendChild(document.createTextNode(words[index]));
-            item.removeAttribute("data-key");
-          }
-        });
-      });
-      modal.on(ModalEvents.Rejected, (): void => {
-        resolve(false);
-        modal.close();
-      });
-      modal.on(ModalEvents.Accepted, (): void => {
-        GDriveApi.setMnemonicSafelyStored()
-          .then((): void => {
-            resolve(true);
-          })
-          .catch((): void => {
-            reject(
-              new Error(
-                "an error has occurred when attempting to call a google api",
-              ),
-            );
-          })
-          .finally((): void => {
-            modal.close();
-          });
-      });
-      modal.open(path, "signer::authorize-signature", 600, 400);
-    },
-  );
-};
 
 const handleMessage = async (
   message: Message<CustodianActions>,
@@ -179,8 +132,8 @@ const onMessage = (message: Message<ActionType>): Promise<void> | void => {
   }
 };
 
-const transformGooglesResponse = (user: GoogleApiUser): GoogleAuthInfo => {
-  const profile = user.getBasicProfile();
+const transformGooglesResponse = (user: gapi.GoogleUser): GoogleAuthInfo => {
+  const profile: gapi.BasicProfile = user.getBasicProfile();
   const auth = user.getAuthResponse(true);
   const { scope } = auth;
   return {
@@ -188,7 +141,7 @@ const transformGooglesResponse = (user: GoogleApiUser): GoogleAuthInfo => {
       token: auth.access_token,
       expiresAt: Number(auth.expires_at),
       idToken: auth.id_token,
-      type: auth.token_type,
+      type: "Bearer",
       scope: scope.split(" "),
     },
     user: {
@@ -200,40 +153,32 @@ const transformGooglesResponse = (user: GoogleApiUser): GoogleAuthInfo => {
   };
 };
 
-const gapi = window.gapi as GoogleApi;
+const dispatchCustomEvent = <T>(type: string, data?: T): void => {
+  window.dispatchEvent(
+    new CustomEvent<AuthEventDetail<T>>(CUSTODIAN_AUTH_EVENT, {
+      detail: {
+        type,
+        data,
+      },
+    }),
+  );
+};
 
-const onAuth2Initialized = (auth2: Auth2): void => {
+const setupAuthButton = (auth2: gapi.GoogleAuth): void => {
   const { application } = window;
   const { button } = application;
   const currentUser = auth2.currentUser.get();
-  const onSignedIn = (user: GoogleApiUser): void => {
-    window.dispatchEvent(
-      new CustomEvent<AuthEventDetail<GoogleAuthInfo>>(CUSTODIAN_AUTH_EVENT, {
-        detail: {
-          type: CUSTODIAN_AUTH_SUCCEEDED_EVENT,
-          data: transformGooglesResponse(user),
-        },
-      }),
+  const onSignedIn = (user: gapi.GoogleUser): void => {
+    dispatchCustomEvent(
+      CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+      transformGooglesResponse(user),
     );
   };
-  const onFailure = (error: Error): void => {
-    window.dispatchEvent(
-      new CustomEvent<AuthEventDetail<Error>>(CUSTODIAN_AUTH_EVENT, {
-        detail: {
-          type: CUSTODIAN_AUTH_FAILED_EVENT,
-          data: error,
-        },
-      }),
-    );
+  const onFailure = (reason: string): void => {
+    dispatchCustomEvent(CUSTODIAN_AUTH_FAILED_EVENT, new Error(reason));
   };
   const onClick = (): void => {
-    window.dispatchEvent(
-      new CustomEvent<AuthEventDetail>(CUSTODIAN_AUTH_EVENT, {
-        detail: {
-          type: CUSTODIAN_AUTH_STARTED_EVENT,
-        },
-      }),
-    );
+    dispatchCustomEvent(CUSTODIAN_AUTH_STARTED_EVENT);
     if (currentUser.isSignedIn()) {
       onSignedIn(currentUser);
     }
@@ -242,40 +187,41 @@ const onAuth2Initialized = (auth2: Auth2): void => {
     auth2.attachClickHandler(button, {}, onSignedIn, onFailure);
   }
   button.addEventListener("click", onClick, true);
-  // Now we are ready for the button to be clicked
-  window.dispatchEvent(
-    new CustomEvent<AuthEventDetail>(CUSTODIAN_AUTH_EVENT, {
-      detail: {
-        type: CUSTODIAN_AUTH_READY_EVENT,
-      },
-    }),
-  );
   // Attach the event listener
   window.addEventListener("message", createMessageCallback(onMessage));
 };
 
-const setupSignInButton = (): void => {
-  const { application } = window;
-  const config = {
-    client_id: application.clientID,
-    scope: "https://www.googleapis.com/auth/drive.appdata",
-  };
-  gapi.auth2
-    .init(config)
-    .then(onAuth2Initialized)
-    .catch((): void => {
-      window.dispatchEvent(
-        new CustomEvent<Error>(CUSTODIAN_AUTH_FAILED_EVENT, {
-          detail: new Error("failed to initialize the google auth2 library"),
-        }),
-      );
-    });
-};
+const google = window.gapi as gapi.Google;
 
-const onConnectGApi = (): void => {
-  window.removeEventListener(CUSTODIAN_AUTH_CONNECT_GAPI_EVENT, onConnectGApi);
-  // Initialize google auth api
-  gapi.load("auth2", setupSignInButton);
+window.initialize = async (): Promise<void> => {
+  return new Promise(
+    (resolve: () => void, reject: (error: Error | string) => void): void => {
+      const { userAgent } = navigator;
+      if (userAgent.includes("jsdom")) {
+        resolve();
+        return;
+      }
+      google.load("auth2", {
+        callback: (): void => {
+          const { application } = window;
+          const config = {
+            client_id: application.clientID,
+            scope: "https://www.googleapis.com/auth/drive.appdata",
+          };
+          google.auth2
+            .init(config)
+            .then((auth2: gapi.GoogleAuth): void => {
+              setupAuthButton(auth2);
+              resolve();
+            })
+            .catch(reject);
+        },
+        onerror: (): void => {
+          reject(new Error("could not load the gapi library"));
+        },
+      });
+    },
+  );
 };
 
 window.onload = (): void => {
@@ -288,11 +234,9 @@ window.onload = (): void => {
     "signer",
   )
     .then((): void => {
-      // Announce initialization
+      // This is not a custom event, that's why it does not use the
+      // helper function
       window.dispatchEvent(new Event(FRAME_CREATED_AND_LOADED));
-      // When the signer object is ready to listen to our messages
-      // it will let us know
-      window.addEventListener(CUSTODIAN_AUTH_CONNECT_GAPI_EVENT, onConnectGApi);
     })
     .catch((error: any): void => {
       console.warn(error);

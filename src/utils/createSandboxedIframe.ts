@@ -12,7 +12,6 @@ export const createSandboxedIframe = async (
   config: Config,
   key: string,
   parent = document.body,
-  permissions = ["allow-scripts", "allow-popups"],
 ): Promise<HTMLIFrameElement> => {
   // Create a new frame element
   const frame: HTMLIFrameElement = document.createElement("iframe");
@@ -26,10 +25,11 @@ export const createSandboxedIframe = async (
   // It is important to do this before sandboxing
   // the iframe, or it will not allow us to do it
   contentWindow.signerConfig = config.signer;
-  // Set attributes (like sandbox)
-  frame.setAttribute("sandbox", permissions.join(" "));
-  frame.setAttribute("id", "gdrive-custodian-" + key);
   contentWindow.application = config.application;
+  // Harden and identify. Must be hardened here because other wise,
+  // we cannot write the config
+  frame.setAttribute("sandbox", "allow-scripts");
+  frame.setAttribute("id", "gdrive-custodian-" + key);
   // Write the html
   contentDocument.open();
   contentDocument.write(content);

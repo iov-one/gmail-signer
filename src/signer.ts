@@ -1,6 +1,5 @@
 import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 import {
-  CUSTODIAN_AUTH_CONNECT_GAPI_EVENT,
   CUSTODIAN_AUTH_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
   CUSTODIAN_AUTH_READY_EVENT,
@@ -8,17 +7,18 @@ import {
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
 } from "frames/constants";
 import content from "templates/custodian.html";
-import { Tx } from "type/tx";
 import { ActionType } from "types/actionType";
 import { Application } from "types/application";
+import { AuthEventDetail } from "types/authEventDetail";
 import { CommonError } from "types/commonError";
 import { CustodianActions } from "types/custodianActions";
 import { ErrorActions } from "types/errorActions";
-import { isGoogleAuthInfo } from "types/gogoleAuthInfo";
+import { GoogleAuthInfo, isGoogleAuthInfo } from "types/gogoleAuthInfo";
 import { GoogleAccessToken } from "types/googleAccessToken";
 import { isErrorMessage, Message } from "types/message";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
+import { Tx } from "types/tx";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { createSandboxedIframe } from "utils/createSandboxedIframe";
 import { isError } from "utils/isError";
@@ -267,7 +267,7 @@ export class Signer {
    *        gdrive-custodian code
    */
   private onAuthEvent = (
-    event: CustomEvent<{ type: string; data: any }>,
+    event: CustomEvent<AuthEventDetail<GoogleAuthInfo | Error | string>>,
   ): void => {
     const { detail: eventData } = event;
     switch (eventData.type) {
@@ -275,9 +275,7 @@ export class Signer {
         this.setState(SignerState.Authenticating);
         break;
       case CUSTODIAN_AUTH_READY_EVENT:
-        window.addEventListener("message", this.onMessage);
         // Resolve the pending promise if it's there
-        console.log("resolving the promise");
         this.setAuthButtonReady();
         break;
       case CUSTODIAN_AUTH_SUCCEEDED_EVENT:
@@ -334,22 +332,16 @@ export class Signer {
       document.body,
     );
     const { contentWindow } = this.custodianFrame;
-    // Start listening on the authentication events
-    contentWindow.addEventListener(CUSTODIAN_AUTH_EVENT, this.onAuthEvent);
-    // Now create a promise so that the caller can await on it
-    return new Promise(
-      (resolve: () => void, reject: (error: Error) => void): void => {
-        this.setAuthButtonNotInitialized = reject;
-        this.setAuthButtonReady = resolve;
-        // We are ready right now
-        contentWindow.dispatchEvent(
-          new Event(CUSTODIAN_AUTH_CONNECT_GAPI_EVENT),
-        );
-      },
-    );
+    if (typeof contentWindow.initialize === "function") {
+      window.addEventListener("message", this.onMessage);
+      // Start listening on the authentication events
+      contentWindow.addEventListener(CUSTODIAN_AUTH_EVENT, this.onAuthEvent);
+      // Call the window specialized initializer
+      return contentWindow.initialize();
+    }
   };
 
-  private disconnect = (): void => {
+  public disconnect = (): void => {
     const parent: HTMLElement = document.body;
     if (parent !== null) {
       // Remove the iframe from the body of the document

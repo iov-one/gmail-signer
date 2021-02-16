@@ -1,4 +1,41 @@
+import { AttachClickHandlerOptions, gapi } from "../src/gapi";
 import { Events, Signer, SignerState } from "../lib";
+
+class AuthMock implements gapi.GoogleAuth {
+  readonly currentUser: gapi.GoogleUser;
+
+  attachClickHandler(
+    button: HTMLElement,
+    options: AttachClickHandlerOptions,
+    success: (user: gapi.GoogleUser) => void,
+    failure: (reason: string) => void,
+  ): void {
+    console.log("attaching click ")
+  }
+
+  public init(config: {
+    client_id: string;
+    scope: string;
+  }): Promise<gapi.GoogleAuth> {
+    console.log("initialized auth object");
+    return Promise.resolve(this);
+  }
+}
+
+class GoogleMock implements gapi.Google {
+  public load(lib: string, options: any): void {
+    console.log(`loading ${lib}`);
+  }
+
+  readonly auth2: gapi.GoogleAuth = new AuthMock();
+}
+
+declare global {
+  interface Window {
+    gapi: gapi.Google;
+  }
+}
+
 
 describe("All features work", () => {
   let signer: Signer;
@@ -7,7 +44,7 @@ describe("All features work", () => {
 
   beforeAll((): void => {
     const { body } = document;
-
+    window.gapi = new GoogleMock();
     button = document.createElement("button");
     body.appendChild(button);
   });
@@ -29,18 +66,22 @@ describe("All features work", () => {
     signer.on(Events.StateChange, eventHandler);
   });
 
-  it("Connects and attaches the button", async (done: (
+  it("Connects and attaches the button", (done: (
     error?: Error,
-  ) => void): Promise<void> => {
-    try {
-      await signer.connect({
+  ) => void): void => {
+    const loadSpy = jest.spyOn(window.gapi, "load");
+    signer
+      .connect({
         clientID:
           "759323103801-65vnghmgg12pass7ef7f34ajjcgp57nd.apps.googleusercontent.com",
         button: button,
+      })
+      .then((): void => {
+        signer.disconnect();
+        done();
+      })
+      .catch((error: any): void => {
+        done(error);
       });
-      done();
-    } catch (error) {
-      done(error);
-    }
   });
 });

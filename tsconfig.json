@@ -14,7 +14,7 @@
     "baseUrl": "src",
     "paths": {
       "frames/*": ["./frames/*"],
-      "type/*": ["./types/*"],
+      "types/*": ["./types/*"],
       "templates/*": ["./templates/*"],
       "utils/*": ["./utils/*"],
       "signer": ["./signer"],

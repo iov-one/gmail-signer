@@ -16,16 +16,19 @@ export const sendMessage = <A extends ActionType, T = undefined>(
   }
   switch (message.target) {
     case "Custodian":
-      if (!isCustodianMessage(message))
+      if (!isCustodianMessage(message)) {
         throw new Error("Sending a non custodian message to the custodian");
+      }
       break;
     case "Signer":
-      if (!isSignerMessage(message))
+      if (!isSignerMessage(message)) {
         throw new Error("Sending a non signer message to the signer");
+      }
       break;
     case "Root":
-      if (!isRootMessage(message))
+      if (!isRootMessage(message)) {
         throw new Error("Sending a non root message to the root");
+      }
       break;
   }
   recipient.postMessage(message, origin);

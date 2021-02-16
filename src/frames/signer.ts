@@ -4,11 +4,11 @@ import { onGetAddress } from "frames/signer/handlers/onGetAddress";
 import { onInitialize } from "frames/signer/handlers/onInitialize";
 import { onSignTx } from "frames/signer/handlers/onSignTx";
 import { Wallet } from "frames/signer/wallet";
-import { Tx } from "type/tx";
 import { ErrorActions } from "types/errorActions";
 import { Message } from "types/message";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
+import { Tx } from "types/tx";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
 

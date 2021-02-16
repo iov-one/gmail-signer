@@ -16,7 +16,7 @@ export const onAuthenticated = async (): Promise<Message<
       data: mnemonic,
     };
   } catch (error) {
-    if (error.message === NotFoundError.message) {
+    if (error === NotFoundError) {
       const mnemonic: string = await createMnemonic();
       // Save it too
       await GDriveApi.writeMnemonic(mnemonic);

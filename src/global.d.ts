@@ -1,15 +1,16 @@
 import { Wallet } from "frames/signer/wallet";
+import { gapi } from "gapi";
 import { SignerConfig } from "signer";
-import { Application } from "type/application";
-import { GoogleAccessToken } from "type/googleAccessToken";
-import { GoogleApi } from "type/googleApi";
+import { Application } from "types/application";
+import { GoogleAccessToken } from "types/googleAccessToken";
 
 declare global {
   interface Window {
     accessToken: GoogleAccessToken;
     signerConfig: SignerConfig;
     application: Application;
-    gapi: GoogleApi /* Google API */;
     wallet: Wallet;
+    gapi: gapi.Google;
+    initialize?(): Promise<void>;
   }
 }
