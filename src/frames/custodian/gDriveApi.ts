@@ -1,3 +1,4 @@
+import { entropyToMnemonic, mnemonicToEntropy } from "bip39";
 import { CommonError } from "types/commonError";
 import {
   FilesData,
@@ -5,7 +6,11 @@ import {
   isMnemonicData,
   isMnemonicSavedData,
 } from "types/filesData";
+import { GoogleAccessToken } from "types/googleAccessToken";
 
+const InvalidServerResponse: Error = new Error("invalid response from server");
+
+// eslint-disable-next-line
 export namespace GDriveApi {
   interface Error {
     readonly error: {
@@ -43,8 +48,7 @@ export namespace GDriveApi {
     };
   };
 
-  const getFileId = async (): Promise<string> => {
-    const { accessToken } = window;
+  const getFileId = async (accessToken: GoogleAccessToken): Promise<string> => {
     const query: string[] = [
       "name='mnemonic'",
       "appProperties has 'tag'",
@@ -78,7 +82,10 @@ export namespace GDriveApi {
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());
+      default:
+        throw InvalidServerResponse;
     }
+    return "";
   };
 
   const handleSavedQuerySuccess = async (
@@ -91,6 +98,8 @@ export namespace GDriveApi {
     } else if (isMnemonicSavedData(files[0])) {
       const { appProperties } = files[0];
       return appProperties.saved;
+    } else {
+      throw new Error("cannot read query's response");
     }
   };
 
@@ -103,7 +112,7 @@ export namespace GDriveApi {
       throw NotFoundError;
     } else if (isMnemonicData(files[0])) {
       const { appProperties } = files[0];
-      return appProperties.mnemonic;
+      return entropyToMnemonic(appProperties.seed);
     } else {
       throw NotFoundError;
     }
@@ -115,14 +124,15 @@ export namespace GDriveApi {
    *
    * @returns A mnemonic as a string or null if for some reason it cannot fetch it
    */
-  export const readMnemonic = async (): Promise<string> => {
-    const { accessToken } = window;
+  export const readMnemonic = async (
+    accessToken: GoogleAccessToken,
+  ): Promise<string> => {
     const query: string[] = [
-      "name='mnemonic'",
+      "name='seed'",
       "appProperties has 'tag'",
       "appDataFolder in parents",
       "spaces=appDataFolder",
-      "fields=files(appProperties/mnemonic)",
+      "fields=files(appProperties/seed)",
       "orderBy=modifiedTime desc",
       "pageSize=1",
     ];
@@ -141,16 +151,21 @@ export namespace GDriveApi {
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());
+      default:
+        throw InvalidServerResponse;
     }
   };
 
   /**
    * Write the mnemonic to Google Drive
    *
+   * @param accessToken
    * @param mnemonic
    */
-  export const writeMnemonic = async (mnemonic: string): Promise<void> => {
-    const { accessToken } = window;
+  export const writeMnemonic = async (
+    accessToken: GoogleAccessToken,
+    mnemonic: string,
+  ): Promise<void> => {
     const response: Response = await fetch(
       "https://www.googleapis.com/drive/v3/files",
       {
@@ -160,10 +175,10 @@ export namespace GDriveApi {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: "mnemonic",
+          name: "seed",
           appProperties: {
-            mnemonic: mnemonic,
-            tag: "mnemonic",
+            seed: mnemonicToEntropy(mnemonic),
+            tag: "seed",
           },
           parents: ["appDataFolder"],
         }),
@@ -174,8 +189,9 @@ export namespace GDriveApi {
     }
   };
 
-  export const isMnemonicSafelyStored = async (): Promise<boolean> => {
-    const { accessToken } = window;
+  export const isMnemonicSafelyStored = async (
+    accessToken: GoogleAccessToken,
+  ): Promise<boolean> => {
     const query: string[] = [
       "name='saved'",
       "appProperties has 'tag'",
@@ -208,11 +224,14 @@ export namespace GDriveApi {
       case 403:
       case 401:
         throw googleErrorToCommonError(await response.json());
+      default:
+        return false;
     }
   };
 
-  export const setMnemonicSafelyStored = async (): Promise<void> => {
-    const { accessToken } = window;
+  export const setMnemonicSafelyStored = async (
+    accessToken: GoogleAccessToken,
+  ): Promise<void> => {
     const response: Response = await fetch(
       "https://www.googleapis.com/drive/v3/files",
       {
@@ -239,10 +258,11 @@ export namespace GDriveApi {
   /**
    * Delete the mnemonic from Google Drive
    */
-  export const deleteMnemonic = async (): Promise<void> => {
-    const { accessToken } = window;
+  export const deleteMnemonic = async (
+    accessToken: GoogleAccessToken,
+  ): Promise<void> => {
     // FIXME: do get the id
-    const id: string = await getFileId();
+    const id: string = await getFileId(accessToken);
     const response: Response = await fetch(
       `https://www.googleapis.com/drive/v3/files/${id}`,
       {
@@ -257,8 +277,9 @@ export namespace GDriveApi {
     }
   };
 
-  export const revokeToken = async (): Promise<void> => {
-    const { accessToken } = window;
+  export const revokeToken = async (
+    accessToken: GoogleAccessToken,
+  ): Promise<void> => {
     const response: Response = await fetch(
       `https://oauth2.googleapis.com/revoke?token=${accessToken.token}`,
       {

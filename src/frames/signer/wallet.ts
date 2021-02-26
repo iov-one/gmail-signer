@@ -45,6 +45,7 @@ export class Wallet {
     sequence: number,
   ): Promise<StdSignature> {
     const { wallet } = this;
+    if (wallet === null) throw new Error("wallet not initialized");
     const signBytes = makeSignBytes(
       messages,
       fee,
@@ -53,6 +54,9 @@ export class Wallet {
       accountNumber,
       sequence,
     );
-    return await wallet.sign(await this.getAddress(), signBytes);
+    const address: string | undefined = await this.getAddress();
+    if (address === undefined)
+      throw new Error("cannot get the address for this wallet");
+    return await wallet.sign(address, signBytes);
   }
 }

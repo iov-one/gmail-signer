@@ -9,11 +9,25 @@ export interface GoogleAccessToken {
 }
 
 export const isGoogleAccessToken = (
-  value: Record<string, unknown> | GoogleAccessToken,
+  value: GoogleAccessToken | unknown,
 ): value is GoogleAccessToken => {
-  if (!propertyExistsAndHasType(value, "token", "string")) return false;
-  if (!propertyExistsAndHasType(value, "idToken", "string")) return false;
-  if (!propertyExistsAndHasType(value, "expiresAt", "number")) return false;
-  if (!("type" in value && value.type === "Bearer")) return false;
-  return "scope" in value && Array.isArray(value.scope);
+  if (value === null || value === undefined) return false;
+  const nonNullValue: GoogleAccessToken | any = value;
+  if (!propertyExistsAndHasType(nonNullValue, "token", "string")) return false;
+  if (!propertyExistsAndHasType(nonNullValue, "idToken", "string"))
+    return false;
+  if (!propertyExistsAndHasType(nonNullValue, "expiresAt", "number"))
+    return false;
+  if (typeof nonNullValue !== "object") return false;
+  if (
+    !(
+      "type" in nonNullValue &&
+      (nonNullValue as GoogleAccessToken).type === "Bearer"
+    )
+  )
+    return false;
+  return (
+    "scope" in nonNullValue &&
+    Array.isArray((nonNullValue as GoogleAccessToken).scope)
+  );
 };

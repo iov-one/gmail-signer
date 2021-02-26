@@ -12,17 +12,22 @@ import { Tx } from "types/tx";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
 
+const ModuleGlobals: { wallet: Wallet; authorizationPath: string | null } = {
+  wallet: new Wallet(),
+  authorizationPath: null,
+};
+
 const handleMessage = async (
   message: Message<SignerActions, Tx | string>,
 ): Promise<Message<
   RootActions | ErrorActions,
-  Error | StdSignature | string
+  Error | StdSignature | string | undefined
 > | null> => {
   const { data } = message;
   switch (message.type) {
     case SignerActions.Initialize:
       if (typeof data === "string") {
-        return onInitialize(data);
+        return onInitialize(ModuleGlobals.wallet, data);
       } else {
         return {
           target: "Root",
@@ -34,8 +39,10 @@ const handleMessage = async (
       }
     case SignerActions.SignTx:
       try {
-        if (typeof data !== "string") {
+        if (typeof data !== "string" && typeof data !== "undefined") {
           return onSignTx(
+            ModuleGlobals.wallet,
+            ModuleGlobals.authorizationPath,
             data.messages,
             data.fee,
             data.chainId,
@@ -60,13 +67,16 @@ const handleMessage = async (
         };
       }
     case SignerActions.GetAddress:
-      return onGetAddress();
+      return onGetAddress(ModuleGlobals.wallet);
     default:
       console.warn(`unknown message: ${message.type as string}`);
+      return null;
   }
 };
 
-const onMessage = async (message: Message<SignerActions>): Promise<void> => {
+const onMessage = async (
+  message: Message<SignerActions, string | Tx>,
+): Promise<void> => {
   if (message.target !== "Signer") {
     console.warn(
       `message sent to \`Signer' but meant for \`${message.target}'`,
@@ -75,7 +85,7 @@ const onMessage = async (message: Message<SignerActions>): Promise<void> => {
   } else {
     const response: Message<
       RootActions | ErrorActions,
-      Error | StdSignature | string
+      Error | StdSignature | string | undefined
     > | null = await handleMessage(message);
     if (response !== null) {
       sendMessage(parent, {
@@ -90,16 +100,18 @@ const onMessage = async (message: Message<SignerActions>): Promise<void> => {
 };
 
 // Entry point for the signer
-window.onload = (): void => {
-  window.wallet = new Wallet();
+window.addEventListener("load", (): void => {
   // Announce initialization
-  window.dispatchEvent(new Event(FRAME_CREATED_AND_LOADED));
+  parent.postMessage(FRAME_CREATED_AND_LOADED, location.origin);
   // Attach the event listener
-  window.addEventListener("message", createMessageCallback(onMessage));
+  window.addEventListener(
+    "message",
+    createMessageCallback<SignerActions, string | Tx>(onMessage),
+  );
   // Send the very first message to the parent window
   sendMessage(parent, {
     target: "Root",
     type: RootActions.Sandboxed,
     data: undefined,
   });
-};
+});

@@ -6,6 +6,7 @@ import {
   StdFee,
   StdSignature,
 } from "@cosmjs/launchpad";
+import { Wallet } from "frames/signer/wallet";
 import { Modal } from "modal";
 import { Message } from "types/message";
 import { ModalEvents } from "types/modalEvents";
@@ -24,7 +25,7 @@ const getFeeValue = (fee: StdFee): number => {
   const coin: Coin = fee.amount[0];
   if (coin === undefined) return 0;
   const numeric = Number(coin.amount);
-  if (isNaN(numeric) === true || numeric === 0) return 0;
+  if (isNaN(numeric) || numeric === 0) return 0;
   return numeric / ONE_MILLION;
 };
 
@@ -97,6 +98,8 @@ const toTransaction = (
 };
 
 export const onSignTx = async (
+  wallet: Wallet,
+  authorizationPath: string | null,
   messages: ReadonlyArray<Msg>,
   fee: StdFee,
   chainId: string,
@@ -104,10 +107,6 @@ export const onSignTx = async (
   accountNumber: number,
   sequenceNumber: number,
 ): Promise<Message<RootActions, StdSignature | Error>> => {
-  const { wallet } = window;
-  const {
-    authorization: { path },
-  } = window.signerConfig;
   const modal = new Modal();
   return new Promise(
     (
@@ -120,6 +119,7 @@ export const onSignTx = async (
             "[data-key]",
           );
           items.forEach((item: Element): void => {
+            const childNode: Node | null = item.firstElementChild;
             switch (item.getAttribute("data-key")) {
               case "fee":
                 item.appendChild(
@@ -143,10 +143,12 @@ export const onSignTx = async (
                 );
                 break;
               case "entries":
-                item.replaceChild(
-                  buildRecipientsList(item, messages),
-                  item.firstElementChild,
-                );
+                if (childNode !== null) {
+                  item.replaceChild(
+                    buildRecipientsList(item, messages),
+                    childNode,
+                  );
+                }
                 break;
               case "transaction":
                 item.appendChild(
@@ -192,7 +194,16 @@ export const onSignTx = async (
               });
             });
         });
-        modal.open(path, "signer::authorize-signature", 600, 400);
+        if (authorizationPath !== null) {
+          modal.open(
+            authorizationPath,
+            "signer::authorize-signature",
+            600,
+            400,
+          );
+        } else {
+          console.warn("cannot open the authorization modal");
+        }
       } else {
         wallet
           .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)

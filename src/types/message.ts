@@ -16,6 +16,7 @@ export const isMessage = (
   object: Message<any> | unknown,
 ): object is Message<any> => {
   if (typeof object !== "object") return false;
+  if (object === null) return false;
   if ("target" in object && "type" in object) {
     const message = object as Message<any>;
     return ["Custodian", "Signer", "Root"].some(

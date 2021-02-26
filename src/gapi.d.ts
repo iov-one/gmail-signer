@@ -23,28 +23,31 @@ declare namespace gapi {
     getImageUrl(): string;
   }
 
-  export interface GoogleUser {
+  export interface Error {
+    readonly error: string;
+  }
+
+  interface Observable<T> {
+    readonly listen: (callback: (value: T) => void) => void;
+  }
+
+  export interface User extends Observable<User> {
     getBasicProfile(): BasicProfile;
     getAuthResponse(arg: boolean): GoogleApiAuthResponse;
-    get(): GoogleUser;
+    get(): User;
     isSignedIn(): boolean;
   }
 
-  export interface Google {
+  export interface gapi {
     readonly load: (mod: string, options: LoadOptions) => void;
-    readonly auth2: GoogleAuth;
+    readonly auth2: Auth;
   }
 
-  export interface GoogleAuth {
-    readonly currentUser: GoogleUser;
+  export interface Auth {
+    readonly currentUser: User;
+    readonly isSignedIn: Observable<boolean>;
+    signIn(): Promise<User>;
 
-    attachClickHandler(
-      button: HTMLElement,
-      options: AttachClickHandlerOptions,
-      success: (user: GoogleUser) => void,
-      failure: (reason: string) => void,
-    ): void;
-
-    init(config: { client_id: string; scope: string }): Promise<GoogleAuth>;
+    init(config: { client_id: string; scope: string }): Promise<Auth>;
   }
 }

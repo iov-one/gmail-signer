@@ -5,7 +5,7 @@ import { setWindowCloseHandler } from "utils/setWindowCloseHandler";
 type GenericCallback = (...args: any[]) => void;
 
 export class Modal {
-  private popup: Window | null;
+  private popup: Window | null = null;
   private settled = false;
 
   private handlers: { [event in ModalEvents]: GenericCallback | undefined } = {
@@ -33,6 +33,8 @@ export class Modal {
 
   private onLoad = (): void => {
     const { popup } = this;
+    if (popup === null)
+      throw new Error("window was never created, something is wrong");
     const { document } = popup;
     document.addEventListener("keydown", (event: KeyboardEvent): void => {
       if (event.ctrlKey) {
@@ -59,8 +61,12 @@ export class Modal {
       accept.onclick = (): void => this.accept();
     });
     // We allow multiple reject buttons
-    rejects.forEach((reject: HTMLElement): void => {
-      reject.onclick = (): void => this.reject();
+    rejects.forEach((reject: Element): void => {
+      if (reject instanceof HTMLElement) {
+        reject.onclick = (): void => this.reject();
+      } else {
+        console.warn("reject element is not a html element");
+      }
     });
     // In case the caller wants to do something, let's allow them
     this.invokeHandler(ModalEvents.Loaded, document);
@@ -74,7 +80,7 @@ export class Modal {
   };
 
   public open(path: string, name = "", width = 1, height = 1): void {
-    const popup: Window = window.open(
+    const popup: Window | null = window.open(
       path,
       name,
       toWindowOptions({
@@ -120,7 +126,7 @@ export class Modal {
   public close(): void {
     const { popup } = this;
     // Close the window if it's not already closed
-    if (popup !== null && popup.closed === false) {
+    if (popup !== null && !popup.closed) {
       popup.removeEventListener("load", this.onLoad);
       popup.close();
     }

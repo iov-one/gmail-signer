@@ -1,4 +1,3 @@
-import "../src/3rdParty/gapi";
 import { Events, Signer, SignerState } from "../lib";
 
 describe("All features work", () => {

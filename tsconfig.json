@@ -7,6 +7,8 @@
       "ES2015",
       "DOM"
     ],
+    "strict": true,
+    "alwaysStrict": true,
     "esModuleInterop": true,
     "sourceMap": true,
     "declaration": true,
@@ -18,8 +20,7 @@
       "templates/*": ["./templates/*"],
       "utils/*": ["./utils/*"],
       "signer": ["./signer"],
-      "window": ["./window"],
-      "3rdparty/*": ["./3rdparty/*"]
+      "window": ["./window"]
     }
   },
   "include": [

@@ -1,3 +1,4 @@
+const webpack = require("webpack");
 const path = require("path");
 const loaders = { iframe: path.resolve(__dirname, "iframe-loader.js") };
 
@@ -5,7 +6,6 @@ module.exports = {
   mode: "production",
   entry: {
     index: path.resolve(__dirname, "src/index.ts"),
-    "index.min": path.resolve(__dirname, "src/index.ts"),
   },
   devtool: "source-map",
   output: {
@@ -24,9 +24,11 @@ module.exports = {
       signer: path.join(__dirname, "src/signer"),
       window: path.join(__dirname, "src/window"),
       modal: path.join(__dirname, "src/modal/"),
-      "3rdParty": path.join(__dirname, "src/3rdParty/"),
     },
   },
+  plugins: [new webpack.SourceMapDevToolPlugin({
+
+  })],
   module: {
     rules: [
       {
@@ -35,7 +37,6 @@ module.exports = {
         use: {
           loader: "ts-loader",
           options: {
-            transpileOnly: true,
             experimentalWatchApi: true,
           },
         },

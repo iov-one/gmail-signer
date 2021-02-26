@@ -7,4 +7,5 @@ export enum RootActions {
   SendIsMnemonicSafelyStored = "SEND_IS_MNEMONIC_SAFELY_STORED",
   SignedOut = "SIGNED_OUT",
   Sandboxed = "SANDBOXED",
+  ForwardedError = "FORWARDED_ERROR",
 }

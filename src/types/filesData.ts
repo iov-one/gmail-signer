@@ -1,6 +1,6 @@
 export interface MnemonicData {
   readonly appProperties: {
-    readonly mnemonic: string;
+    readonly seed: string;
   };
 }
 
@@ -31,8 +31,7 @@ export const isMnemonicData = (
   file: MnemonicData | any,
 ): file is MnemonicData => {
   return (
-    "appProperties" in file &&
-    "mnemonic" in (file as MnemonicData).appProperties
+    "appProperties" in file && "seed" in (file as MnemonicData).appProperties
   );
 };
 

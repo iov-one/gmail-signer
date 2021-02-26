@@ -1,12 +1,12 @@
+import { Wallet } from "frames/signer/wallet";
 import { ErrorActions } from "types/errorActions";
 import { Message } from "types/message";
 import { RootActions } from "types/rootActions";
 
-export const onGetAddress = async (): Promise<
-  Message<RootActions | ErrorActions, string>
-> => {
-  const { wallet } = window;
-  const address: string = await wallet.getAddress();
+export const onGetAddress = async (
+  wallet: Wallet,
+): Promise<Message<RootActions | ErrorActions, string>> => {
+  const address: string | undefined = await wallet.getAddress();
   if (address === undefined) {
     return {
       target: "Root",

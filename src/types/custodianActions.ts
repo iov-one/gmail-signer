@@ -1,5 +1,4 @@
 export enum CustodianActions {
-  Authenticated = "AUTHENTICATED",
   ShowMnemonic = "SHOW_MNEMONIC",
   GetIsMnemonicSafelyStored = "GET_IS_MNEMONIC_SAFELY_STORED",
   DeleteAccount = "DELETE_ACCOUNT",
