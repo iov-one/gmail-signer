@@ -26,7 +26,6 @@ describe("All features work", () => {
 
   afterAll((): void => {
     signer.off(Events.StateChange);
-    console.log("Cool");
   });
 
   it("Connects and attaches the button", async (): Promise<void> => {

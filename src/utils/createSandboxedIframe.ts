@@ -4,19 +4,22 @@ import { createTemporaryMessageHandler } from "utils/createTemporaryMessageHandl
 export const createSandboxedIframe = async (
   content: string,
   key: string,
+  extraPermissions: ReadonlyArray<string> = [],
 ): Promise<HTMLIFrameElement> => {
   const { body } = document;
   // Create a new frame element
   const frame: HTMLIFrameElement = document.createElement("iframe");
-  // After adding it to the child, the content document becomes
-  // non-null so this is important to be done before anything else
-  body.insertBefore(frame, body.firstElementChild);
-  // Now set it's content to the specified
-  const { contentDocument } = frame;
-  if (contentDocument === null) throw new Error("frame not created correctly");
+  const permissions: ReadonlyArray<string> = [
+    ...extraPermissions,
+    "allow-scripts",
+    "allow-same-origin",
+  ];
   // Harden it
-  frame.setAttribute("sandbox", "");
+  frame.setAttribute("sandbox", permissions.join(" "));
   frame.setAttribute("name", key);
+  // Now set it's content to the specified
+  const { contentDocument } = body.insertBefore(frame, body.firstElementChild);
+  if (contentDocument === null) throw new Error("frame not created correctly");
   // Write the html
   contentDocument.open();
   contentDocument.write(content);

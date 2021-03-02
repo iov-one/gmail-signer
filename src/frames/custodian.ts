@@ -10,7 +10,13 @@ import { GDriveApi } from "frames/custodian/gDriveApi";
 import { onAbandon } from "frames/custodian/handlers/onAbandon";
 import { onDeleteAccount } from "frames/custodian/handlers/onDeleteAccount";
 import { onSignOut } from "frames/custodian/handlers/onSignOut";
+import { getCurrentUser } from "frames/custodian/helpers/getCurrentUser";
+import { onRootMessage } from "frames/custodian/helpers/onRootMessage";
+import { onSignerMessage } from "frames/custodian/helpers/onSignerMessage";
+import { readOrCreateMnemonic } from "frames/custodian/helpers/readOrCreateMnemonic";
+import { sendAuthMessage } from "frames/custodian/helpers/sendAuthMessage";
 import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
+import { transformGooglesResponse } from "frames/custodian/helpers/transformGooglesResponse";
 import { getFrameSpecificData } from "frames/helpers/getFrameSpecificData";
 import { gapi } from "gapi";
 import signer from "templates/signer.html";
@@ -23,6 +29,7 @@ import {
   GoogleAccessToken,
   isGoogleAccessToken,
 } from "types/googleAccessToken";
+import { isGoogleAuthError } from "types/googleOAuthError";
 import {
   isCustodianMessage,
   isRootMessage,
@@ -35,11 +42,6 @@ import { createMessageCallback } from "utils/createMessageCallback";
 import { createSandboxedIframe } from "utils/createSandboxedIframe";
 import { createTemporaryMessageHandler } from "utils/createTemporaryMessageHandler";
 import { sendMessage } from "utils/sendMessage";
-
-const isGoogleAuthError = (value: any | gapi.Error): value is gapi.Error => {
-  const valueAsError = value as gapi.Error;
-  return "error" in value && valueAsError.error !== undefined;
-};
 
 const ModuleGlobals: { accessToken: GoogleAccessToken | null } = {
   accessToken: null,
@@ -85,14 +87,6 @@ const handleMessage = async (
   }
 };
 
-const onSignerMessage = (message: Message<SignerActions>): void => {
-  if (frames.length === 0) {
-    throw new Error("cannot forward this message, not initialized properly");
-  }
-  // Send as is, we don't want to use this
-  return sendMessage(frames[0], message);
-};
-
 const onCustodianMessage = async (
   message: Message<CustodianActions>,
 ): Promise<void> => {
@@ -119,10 +113,7 @@ const onCustodianMessage = async (
   }
 };
 
-const onRootMessage = (message: Message<RootActions>): void =>
-  sendMessage(parent, message);
-
-const onMessage = (message: Message<ActionType>): Promise<void> | void => {
+const onMessage = (message: Message<ActionType, any>): Promise<void> | void => {
   switch (message.target) {
     case "Custodian":
       if (isCustodianMessage(message)) {
@@ -144,62 +135,13 @@ const onMessage = (message: Message<ActionType>): Promise<void> | void => {
   }
 };
 
-const transformGooglesResponse = (user: gapi.User): GoogleAuthInfo => {
-  const profile: gapi.BasicProfile = user.getBasicProfile();
-  const auth = user.getAuthResponse(true);
-  const { scope } = auth;
-  return {
-    accessToken: {
-      token: auth.access_token,
-      expiresAt: Number(auth.expires_at),
-      idToken: auth.id_token,
-      type: "Bearer",
-      scope: scope.split(" "),
-    },
-    user: {
-      firstName: profile.getGivenName(),
-      lastName: profile.getFamilyName(),
-      email: profile.getEmail(),
-      picture: profile.getImageUrl(),
-    },
+interface GoogleFrameMessage {
+  result: {
+    error: string | null;
   };
-};
+}
 
-const sendAuthMessage = <T>(type: string, data?: T): void => {
-  parent.postMessage(
-    {
-      type,
-      data,
-    },
-    location.origin,
-  );
-};
-
-const createWallet = async (
-  signerWindow: Window,
-  googleAuthInfo: GoogleAuthInfo,
-): Promise<void> => {
-  const { accessToken } = googleAuthInfo;
-  signerWindow.postMessage(
-    {
-      type: SignerActions.Initialize,
-      target: "Signer",
-      data: await GDriveApi.readMnemonic(accessToken),
-    },
-    location.origin,
-  );
-};
-
-const getCurrentUser = (auth2: gapi.Auth): gapi.User => {
-  const { currentUser } = auth2;
-  return currentUser.get();
-};
-
-const setupAuthButton = (auth2: gapi.Auth, frame: Window): void => {
-  // FIXME: we may need it in the future
-  void frame;
-  // FIXME: do this with inter-window messages as well
-  //        instead of user-defined events
+const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
   const signIn = async (): Promise<void> => {
     sendAuthMessage(CUSTODIAN_AUTH_STARTED_EVENT);
     const currentUser: gapi.User = getCurrentUser(auth2);
@@ -212,7 +154,18 @@ const setupAuthButton = (auth2: gapi.Auth, frame: Window): void => {
       // Make the access token "global"
       ModuleGlobals.accessToken = authInfo.accessToken;
       // Create the wallet
-      await createWallet(frame, transformGooglesResponse(user));
+      const mnemonic: string = await readOrCreateMnemonic(
+        ModuleGlobals.accessToken,
+      );
+      // Now initialize the signer
+      signer.postMessage(
+        {
+          target: "Signer",
+          type: SignerActions.Initialize,
+          data: mnemonic,
+        },
+        location.origin,
+      );
       // Now let the signer know
       sendAuthMessage(CUSTODIAN_AUTH_SUCCEEDED_EVENT);
     } catch (error) {
@@ -233,6 +186,22 @@ const setupAuthButton = (auth2: gapi.Auth, frame: Window): void => {
         void signIn();
       }
       return false;
+    },
+    {
+      "https://accounts.google.com": (data: any): boolean => {
+        // Check for errors here
+        const dataObject: GoogleFrameMessage = JSON.parse(
+          data,
+        ) as GoogleFrameMessage;
+        if (dataObject.result) {
+          const { error } = dataObject.result;
+          if (error) {
+            sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error);
+            return true;
+          }
+        }
+        return false;
+      },
     },
   );
   // Attach the event listener for message exchange
@@ -258,6 +227,8 @@ const setupGoogleApi = async (
             .init({
               client_id: clientID,
               scope: "https://www.googleapis.com/auth/drive.appdata",
+              cookiepolicy: "single_host_origin",
+              fetch_basic_profile: false,
             })
             .then((auth2: gapi.Auth): void => {
               if (frame.contentWindow !== null) {
@@ -269,9 +240,13 @@ const setupGoogleApi = async (
               }
               resolve();
             })
-            .catch(reject);
+            .catch((error) => {
+              console.warn(error);
+              reject(error);
+            });
         },
-        onerror: (): void => {
+        onerror: (error): void => {
+          console.warn(error);
           reject(new Error("could not load the gapi library"));
         },
       });

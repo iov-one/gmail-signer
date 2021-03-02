@@ -43,6 +43,7 @@ export enum SignerState {
   AuthenticationCompleted,
   Failed,
   CancelledByUser,
+  BrowserProbablyBlockingContent,
 }
 
 export interface SignerConfig {
@@ -289,18 +290,23 @@ export class Signer {
         this.setState(SignerState.Authenticated);
         return true;
       case CUSTODIAN_AUTH_FAILED_EVENT:
-        if (isError(message.data)) {
+        if (isErrorMessage(message)) {
+          this.setState(SignerState.Failed);
+        } else if (isError(message.data)) {
           // FIXME: should do something with the error probably
           this.setState(SignerState.Failed);
         } else if (typeof message.data === "string") {
           if (message.data === "popup_closed_by_user") {
             this.setState(SignerState.CancelledByUser);
+          } else if (message.data === "user_logged_out") {
+            // Interesting: means that the user didn't actually login
+            this.setState(SignerState.BrowserProbablyBlockingContent);
           } else {
             this.setState(SignerState.Failed);
           }
           this.setAuthButtonNotInitialized(message.data);
         } else {
-          console.warn("unknown failure message");
+          console.error(message);
         }
         return true;
       case undefined:
@@ -342,7 +348,9 @@ export class Signer {
       return false;
     });
     // Create the custodian window
-    this.custodianFrame = await createSandboxedIframe(content, "custodian");
+    this.custodianFrame = await createSandboxedIframe(content, "custodian", [
+      "allow-popups",
+    ]);
     // Setup the actual sign in flow trigger and the actual event
     // handler
     const targetWindow: Window = this.getCustodianWindow();

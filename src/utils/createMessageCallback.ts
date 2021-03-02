@@ -4,7 +4,6 @@ import { isMessage, Message } from "types/message";
 export const createMessageCallback = <T extends ActionType, R = undefined>(
   handleMessage: (message: Message<T, R>) => void | Promise<void>,
 ): ((event: MessageEvent) => void) => {
-  console.log(event);
   return (event: MessageEvent): void | Promise<void> => {
     if (event.origin !== location.origin) return;
     if (event.source === window) {

@@ -43,11 +43,18 @@ declare namespace gapi {
     readonly auth2: Auth;
   }
 
+  export interface InitConfig {
+    readonly client_id: string;
+    readonly scope: string;
+    readonly cookiepolicy: "single_host_origin";
+    readonly fetch_basic_profile: boolean;
+  }
+
   export interface Auth {
     readonly currentUser: User;
     readonly isSignedIn: Observable<boolean>;
     signIn(): Promise<User>;
 
-    init(config: { client_id: string; scope: string }): Promise<Auth>;
+    init(config: InitConfig): Promise<Auth>;
   }
 }

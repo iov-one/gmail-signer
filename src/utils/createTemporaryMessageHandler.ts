@@ -18,13 +18,20 @@ const isWindow = (value: any | Window): value is Window => {
 
 export const createTemporaryMessageHandler = <T>(
   handler: (source: Window, data?: T) => Promise<boolean> | boolean,
+  originSpecificHandlers: { [origin: string]: (data: any) => boolean } = {},
 ): void => {
   const asyncHandler = async (event: MessageEvent): Promise<void> => {
-    console.log(event);
-    if (!isWindow(event.source))
-      throw new Error(
-        "message sent by a source that is not a window, forbidden",
-      );
+    const originSpecificHandler: ((data: any) => boolean) | undefined =
+      originSpecificHandlers[event.origin];
+    if (originSpecificHandler !== undefined) {
+      if (originSpecificHandler(event.data)) {
+        window.removeEventListener("message", syncHandler);
+        return;
+      }
+    }
+    if (!isWindow(event.source)) {
+      return;
+    }
     // Ensure we trust it
     if (!isTrustedSource(event) || !isTrustedOrigin(event)) {
       // Ignore this untrusted message
@@ -33,11 +40,11 @@ export const createTemporaryMessageHandler = <T>(
     // Run the handler
     if (await handler(event.source, event.data)) {
       // Remove the listener now that we've handled it
-      window.removeEventListener("message", syncHandler, true);
+      window.removeEventListener("message", syncHandler);
     }
   };
   const syncHandler = (event: MessageEvent): void => {
     void asyncHandler(event);
   };
-  window.addEventListener("message", syncHandler, true);
+  window.addEventListener("message", syncHandler);
 };
