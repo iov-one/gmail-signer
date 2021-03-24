@@ -339,6 +339,10 @@ export class Signer {
    * This methods should be used to close Google's session
    */
   public signOut = async (): Promise<void> => {
+    await this.sendMessageAndPromiseToRespond<string, CustodianActions>({
+      target: "Custodian",
+      type: CustodianActions.SignOut,
+    });
     this.disconnect();
   };
 

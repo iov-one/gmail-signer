@@ -1,236 +1,276 @@
-import { GDriveApi } from "../frames/custodian/gDriveApi";
-import { Modal } from "../frames/modal";
-import { SignerConfig } from "../signer";
-import signer from "../templates/signer.html";
-import { Application } from "../types/application";
-import { GoogleAuthInfo } from "../types/gogoleAuthInfo";
-import { GoogleAccessToken } from "../types/googleAccessToken";
-import { Message } from "../types/message";
-import { ModalEvents } from "../types/modalEvents";
-import { createMessageCallback } from "../utils/createMessageCallback";
-import { createSandboxedIframe } from "../utils/createSandboxedIframe";
-import { sendMessage } from "../utils/sendMessage";
-import { onAbandon } from "./custodian/handlers/onAbandon";
-import { onAuthenticated } from "./custodian/handlers/onAuthenticated";
-import { onDeleteAccount } from "./custodian/handlers/onDeleteAccount";
-import { onSignOut } from "./custodian/handlers/onSignOut";
-import { ChildContainer } from "./signer/childContainer";
+import {
+  CUSTODIAN_AUTH_COMPLETED_EVENT,
+  CUSTODIAN_AUTH_FAILED_EVENT,
+  CUSTODIAN_AUTH_STARTED_EVENT,
+  CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+  CUSTODIAN_SIGN_IN_REQUEST,
+  FRAME_CREATED_AND_LOADED,
+} from "frames/constants";
+import { GDriveApi } from "frames/custodian/gDriveApi";
+import { onAbandon } from "frames/custodian/handlers/onAbandon";
+import { onDeleteAccount } from "frames/custodian/handlers/onDeleteAccount";
+import { onSignOut } from "frames/custodian/handlers/onSignOut";
+import { getCurrentUser } from "frames/custodian/helpers/getCurrentUser";
+import { onRootMessage } from "frames/custodian/helpers/onRootMessage";
+import { onSignerMessage } from "frames/custodian/helpers/onSignerMessage";
+import { readOrCreateMnemonic } from "frames/custodian/helpers/readOrCreateMnemonic";
+import { sendAuthMessage } from "frames/custodian/helpers/sendAuthMessage";
+import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
+import { transformGooglesResponse } from "frames/custodian/helpers/transformGooglesResponse";
+import { getFrameSpecificData } from "frames/helpers/getFrameSpecificData";
+import { gapi } from "gapi";
+import signer from "templates/signer.html";
+import { ActionType } from "types/actionType";
+import { CustodianActions } from "types/custodianActions";
+import { ErrorActions } from "types/errorActions";
+import { GenericMessage } from "types/genericMessage";
+import { GoogleAuthInfo } from "types/gogoleAuthInfo";
+import {
+  GoogleAccessToken,
+  isGoogleAccessToken,
+} from "types/googleAccessToken";
+import { isGoogleAuthError } from "types/googleOAuthError";
+import {
+  isCustodianMessage,
+  isRootMessage,
+  isSignerMessage,
+  Message,
+} from "types/message";
+import { RootActions } from "types/rootActions";
+import { SignerActions } from "types/signerActions";
+import { createMessageCallback } from "utils/createMessageCallback";
+import { createSandboxedIframe } from "utils/createSandboxedIframe";
+import { createTemporaryMessageHandler } from "utils/createTemporaryMessageHandler";
+import { sendMessage } from "utils/sendMessage";
 
-const CHILD_CONTAINER: ChildContainer = new ChildContainer();
+const gapi = window.gapi;
 
-declare global {
-  interface Window {
-    accessToken: GoogleAccessToken;
-    signerConfig: SignerConfig;
-    application: Application;
-    gapi: any /* Google API */;
-  }
-}
-
-const { gapi, application } = window;
-
-const showMnemonic = async (path: string): Promise<boolean> => {
-  const modal = new Modal();
-  const mnemonic = await GDriveApi.readMnemonic();
-  return new Promise(
-    (resolve: (value: boolean) => void, reject: (error: any) => void) => {
-      modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
-        const items: NodeListOf<Element> = document.querySelectorAll(
-          "[data-key]",
-        );
-        const words = mnemonic.split(/\s+/);
-        items.forEach((item: Element): void => {
-          const key: string = item.getAttribute("data-key");
-          if (key.startsWith("word-")) {
-            const index = Number(key.replace("word-", ""));
-            item.appendChild(document.createTextNode(words[index]));
-            item.removeAttribute("data-key");
-          }
-        });
-      });
-      modal.on(ModalEvents.Rejected, (): void => {
-        resolve(false);
-        modal.close();
-      });
-      modal.on(ModalEvents.Accepted, (): void => {
-        GDriveApi.setMnemonicSafelyStored();
-        resolve(true);
-        modal.close();
-      });
-      modal.open(path, "signer::authorize-signature", 600, 400);
-    },
-  );
+const ModuleGlobals: { accessToken: GoogleAccessToken | null } = {
+  accessToken: null,
 };
 
-const handleMessage = async (message: Message): Promise<Message | null> => {
-  const { data } = message;
+const handleMessage = async (
+  message: Message<CustodianActions, GoogleAccessToken | string | undefined>,
+): Promise<Message<
+  RootActions | ErrorActions | SignerActions,
+  Error | boolean | string | undefined
+> | null> => {
   switch (message.type) {
-    case "Authenticated":
-      window.accessToken = data;
-      try {
-        return await onAuthenticated();
-      } catch (error) {
-        window.accessToken = null;
-        return {
-          target: "Root",
-          type: "Error",
-          data: error,
-        };
+    case CustodianActions.ShowMnemonic:
+      if (!isGoogleAccessToken(ModuleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      if (typeof message.data !== "string")
+        throw new Error(
+          "invalid request, for us to send you the mnemonic you need to specify a path",
+        );
+      return {
+        target: "Root",
+        type: RootActions.SendShowMnemonicResult,
+        data: await showMnemonic(ModuleGlobals.accessToken, message.data),
+      };
+    case CustodianActions.GetIsMnemonicSafelyStored:
+      if (!isGoogleAccessToken(ModuleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      return {
+        target: "Root",
+        type: RootActions.SendIsMnemonicSafelyStored,
+        data: await GDriveApi.isMnemonicSafelyStored(ModuleGlobals.accessToken),
+      };
+    case CustodianActions.DeleteAccount:
+      if (!isGoogleAccessToken(ModuleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      return onDeleteAccount(ModuleGlobals.accessToken);
+    case CustodianActions.SignOut:
+      {
+        const instance = gapi.auth2.getAuthInstance();
+        await instance.signOut();
       }
-    case "ShowMnemonic":
-      return {
-        target: "Root",
-        type: "SendShowMnemonicResult",
-        data: await showMnemonic(data),
-      };
-    case "GetIsMnemonicSafelyStored":
-      return {
-        target: "Root",
-        type: "SendIsMnemonicSafelyStored",
-        data: await GDriveApi.isMnemonicSafelyStored(),
-      };
-    case "DeleteAccount":
-      return onDeleteAccount();
-    case "SignOut":
       return onSignOut();
-    case "Abandon":
-      return onAbandon();
-    default:
-      console.warn("unknown message: " + message.type);
+    case CustodianActions.Abandon:
+      if (!isGoogleAccessToken(ModuleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      return onAbandon(ModuleGlobals.accessToken);
   }
 };
 
-const onSignerMessage = async (message: Message): Promise<void> => {
-  const { child } = CHILD_CONTAINER;
-  // This message belongs to the child frame, so
-  // we must redirect it
-  if (child === null) {
-    throw new Error("cannot forward this message, not initialized properly");
-  }
-  // Send as is, we don't want to use this
-  return sendMessage(child.contentWindow, message);
-};
-
-const onCustodianMessage = async (message: Message): Promise<void> => {
-  const { child } = CHILD_CONTAINER;
-  const response: Message | null = await handleMessage(message);
+const onCustodianMessage = async (
+  message: Message<CustodianActions>,
+): Promise<void> => {
+  const response: Message<
+    RootActions | SignerActions | ErrorActions,
+    Error | boolean | string | undefined
+  > | null = await handleMessage(message);
   if (response !== null) {
-    if (response.target === "Signer") {
-      sendMessage(child.contentWindow, {
-        ...response,
-        // Overwrite the uid to let the sender know
-        // this was their original message if the want
-        // or need to
-        uid: message.uid,
-      });
-    } else if (response.target === "Root") {
-      sendMessage(parent, {
-        ...response,
-        // Overwrite the uid to let the sender know
-        // this was their original message if the want
-        // or need to
-        uid: message.uid,
-      });
-    } else {
-      throw new Error(
-        "sorry, I don't know this target: `" + response.target + "'",
+    const targetWindow: Window | undefined =
+      response.target === "Signer" ? frames[0] : parent;
+    if (targetWindow === undefined) {
+      console.warn(
+        "cannot respond to the message or request, because there's no target window",
       );
+    } else {
+      sendMessage(targetWindow, {
+        ...response,
+        // Overwrite the uid to let the sender know
+        // this was their original message if the want
+        // or need to
+        uid: message.uid,
+      });
     }
   }
 };
 
-const onMessage = async (message: Message): Promise<void> => {
+const onMessage = (message: Message<ActionType, any>): Promise<void> | void => {
   switch (message.target) {
     case "Custodian":
-      return onCustodianMessage(message);
+      if (isCustodianMessage(message)) {
+        return onCustodianMessage(message);
+      }
+      break;
     case "Signer":
-      return onSignerMessage(message);
+      if (isSignerMessage(message)) {
+        return onSignerMessage(message);
+      }
+      break;
     case "Root":
-      return sendMessage(parent, message);
+      if (isRootMessage(message)) {
+        return onRootMessage(message);
+      }
+      break;
     default:
-      throw new Error("unknown message type cannot be handled");
+      console.warn("unknown type of message received");
   }
 };
 
-window.onload = (): void => {
-  createSandboxedIframe(
-    signer,
-    {
-      signer: window.signerConfig,
-      application: window.application,
-    },
-    "signer",
-  )
-    .then((frame: HTMLIFrameElement): void => {
-      CHILD_CONTAINER.child = frame;
-      // Announce initialization
-      window.postMessage("", location.origin);
-      // Attach the event listener
-      window.addEventListener("message", createMessageCallback(onMessage));
-    })
-    .catch((error: any): void => {
-      console.warn(error);
-    });
-};
-
-const transformGooglesResponse = (user: any): GoogleAuthInfo => {
-  const profile = user.getBasicProfile();
-  const auth = user.getAuthResponse(true);
-  return {
-    accessToken: {
-      token: auth.access_token,
-      expiresAt: auth.expires_at,
-      idToken: auth.id_token,
-      type: auth.token_type,
-      scope: auth.scope,
-      state: undefined,
-    },
-    user: {
-      firstName: profile.getGivenName(),
-      lastName: profile.getFamilyName(),
-      email: profile.getEmail(),
-      picture: profile.getImageUrl(),
-    },
+interface GoogleFrameMessage {
+  result: {
+    error: string | null;
   };
-};
+}
 
-const main = (): void => {
-  gapi.load("auth2", () => {
-    const target = document.getElementById("gdrive-custodian-sign-in-button");
-    gapi.auth2
-      .init({
-        client_id: application.clientID,
-        scope: "https://www.googleapis.com/auth/drive.appdata",
-      })
-      .then((auth2: any): void => {
-        const currentUser = auth2.currentUser.get();
-        const onSignedIn = (user: any): void => {
-          document.dispatchEvent(
-            new CustomEvent("auth-succeeded", {
-              detail: transformGooglesResponse(user),
-            }),
-          );
-        };
-        const onFailure = (error: any): void => {
-          document.dispatchEvent(
-            new CustomEvent("auth-failed", {
-              detail: error,
-            }),
-          );
-        };
-        const onClick = (): void => {
-          document.dispatchEvent(new Event("auth-started"));
-          if (currentUser.isSignedIn()) {
-            onSignedIn(currentUser);
+const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
+  const signIn = async (): Promise<void> => {
+    sendAuthMessage(CUSTODIAN_AUTH_STARTED_EVENT);
+    const currentUser: gapi.User = getCurrentUser(auth2);
+    try {
+      const user: gapi.User = currentUser.isSignedIn()
+        ? currentUser
+        : await auth2.signIn();
+      // Create the wallet (ask the signer to do so actually)
+      const authInfo: GoogleAuthInfo = transformGooglesResponse(user);
+      // Make the access token "global"
+      ModuleGlobals.accessToken = authInfo.accessToken;
+      // Create the wallet
+      const mnemonic: string = await readOrCreateMnemonic(
+        ModuleGlobals.accessToken,
+      );
+      // Now initialize the signer
+      signer.postMessage(
+        {
+          target: "Signer",
+          type: SignerActions.Initialize,
+          data: mnemonic,
+        },
+        location.origin,
+      );
+      // Now let the signer know
+      sendAuthMessage(CUSTODIAN_AUTH_SUCCEEDED_EVENT);
+    } catch (error) {
+      if (isGoogleAuthError(error)) {
+        sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error.error);
+      } else {
+        sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error);
+      }
+    } finally {
+      sendAuthMessage(CUSTODIAN_AUTH_COMPLETED_EVENT);
+    }
+  };
+  // Listen for sign-in requests, and do so "forever"
+  createTemporaryMessageHandler(
+    (source: Window, data?: GenericMessage): boolean => {
+      if (data === undefined) return false;
+      if (data.type === CUSTODIAN_SIGN_IN_REQUEST) {
+        void signIn();
+      }
+      return false;
+    },
+    {
+      "https://accounts.google.com": (data: any): boolean => {
+        // Check for errors here
+        const dataObject: GoogleFrameMessage = JSON.parse(
+          data,
+        ) as GoogleFrameMessage;
+        if (dataObject.result) {
+          const { error } = dataObject.result;
+          if (error) {
+            sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error);
+            return true;
           }
-        };
-        if (!currentUser.isSignedIn()) {
-          auth2.attachClickHandler(target, {}, onSignedIn, onFailure);
         }
-        target.addEventListener("click", onClick, true);
-        document.dispatchEvent(new Event("auth-ready"));
-      });
-  });
+        return false;
+      },
+    },
+  );
+  // Attach the event listener for message exchange
+  window.addEventListener("message", createMessageCallback(onMessage));
 };
 
-main();
+const setupGoogleApi = async (
+  frame: HTMLIFrameElement,
+  clientID: string,
+): Promise<void> => {
+  return new Promise(
+    (resolve: () => void, reject: (error: Error | string) => void): void => {
+      const { userAgent } = navigator;
+      if (userAgent.includes("jsdom")) {
+        resolve();
+        return;
+      }
+      gapi.load("auth2", {
+        callback: (): void => {
+          gapi.auth2
+            .init({
+              client_id: clientID,
+              scope: "https://www.googleapis.com/auth/drive.appdata",
+              cookiepolicy: "single_host_origin",
+              fetch_basic_profile: false,
+              prompt: "select_account",
+            })
+            .then((auth2: gapi.Auth): void => {
+              if (frame.contentWindow !== null) {
+                setupAuthButton(auth2, frame.contentWindow);
+              } else {
+                console.error(
+                  "this should be impossible, we failed to create the signer iframe inside the custodian iframe",
+                );
+              }
+              resolve();
+            })
+            .catch((error) => {
+              console.warn(error);
+              reject(error);
+            });
+        },
+        onerror: (error): void => {
+          console.warn(error);
+          reject(new Error("could not load the gapi library"));
+        },
+      });
+    },
+  );
+};
+
+const createSignerAndInstallMessagesHandler = async (): Promise<void> => {
+  const frame: HTMLIFrameElement = await createSandboxedIframe(
+    signer,
+    "signer",
+  );
+  const { clientID } = await getFrameSpecificData<{ clientID: string }>();
+  // Setup the google api stuff
+  await setupGoogleApi(frame, clientID);
+  // Finally announce initialization
+  parent.postMessage(FRAME_CREATED_AND_LOADED, location.origin);
+};
+
+window.addEventListener("load", (): void => {
+  void createSignerAndInstallMessagesHandler();
+});
