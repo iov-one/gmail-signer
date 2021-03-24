@@ -48,13 +48,24 @@ declare namespace gapi {
     readonly scope: string;
     readonly cookiepolicy: "single_host_origin";
     readonly fetch_basic_profile: boolean;
+<<<<<<< HEAD
+=======
+    readonly prompt: string;
+>>>>>>> new-version
   }
 
   export interface Auth {
     readonly currentUser: User;
     readonly isSignedIn: Observable<boolean>;
     signIn(): Promise<User>;
+<<<<<<< HEAD
 
     init(config: InitConfig): Promise<Auth>;
+=======
+    signOut(): Promise<void>;
+
+    init(config: InitConfig): Promise<Auth>;
+    getAuthInstance(): Auth;
+>>>>>>> new-version
   }
 }

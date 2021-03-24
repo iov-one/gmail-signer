@@ -43,6 +43,8 @@ import { createSandboxedIframe } from "utils/createSandboxedIframe";
 import { createTemporaryMessageHandler } from "utils/createTemporaryMessageHandler";
 import { sendMessage } from "utils/sendMessage";
 
+const gapi = window.gapi;
+
 const ModuleGlobals: { accessToken: GoogleAccessToken | null } = {
   accessToken: null,
 };
@@ -79,6 +81,10 @@ const handleMessage = async (
         throw new Error("user did not authenticate yet");
       return onDeleteAccount(ModuleGlobals.accessToken);
     case CustodianActions.SignOut:
+      {
+        const instance = gapi.auth2.getAuthInstance();
+        await instance.signOut();
+      }
       return onSignOut();
     case CustodianActions.Abandon:
       if (!isGoogleAccessToken(ModuleGlobals.accessToken))
@@ -208,8 +214,6 @@ const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
   window.addEventListener("message", createMessageCallback(onMessage));
 };
 
-const gapi = window.gapi;
-
 const setupGoogleApi = async (
   frame: HTMLIFrameElement,
   clientID: string,
@@ -229,6 +233,7 @@ const setupGoogleApi = async (
               scope: "https://www.googleapis.com/auth/drive.appdata",
               cookiepolicy: "single_host_origin",
               fetch_basic_profile: false,
+              prompt: "select_account",
             })
             .then((auth2: gapi.Auth): void => {
               if (frame.contentWindow !== null) {
