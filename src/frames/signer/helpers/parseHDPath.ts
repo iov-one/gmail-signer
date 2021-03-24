@@ -1,9 +1,8 @@
 import { Slip10RawIndex } from "@cosmjs/crypto";
 
 export const parseHDPath = (path: string): ReadonlyArray<Slip10RawIndex> => {
-  const matched: RegExpMatchArray = path.match(
-    /m\/(\d+)'\/(\d+)'\/(\d+)'\/(\d+)\/(\d+)/
-  );
+  const regexp = /m\/(\d+)'\/(\d+)'\/(\d+)'\/(\d+)\/(\d+)/;
+  const matched: RegExpMatchArray | null = regexp.exec(path);
   if (matched === null || matched.length !== 6) {
     throw new Error("cannot parse string as HDPath: `" + path + "'");
   }

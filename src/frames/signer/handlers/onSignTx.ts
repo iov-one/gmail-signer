@@ -5,12 +5,12 @@ import {
   MsgSend,
   StdFee,
   StdSignature,
-  StdTx,
 } from "@cosmjs/launchpad";
-
-import { Message } from "../../../types/message";
-import { ModalEvents } from "../../../types/modalEvents";
-import { Modal } from "../../modal";
+import { Wallet } from "frames/signer/wallet";
+import { Modal } from "modal";
+import { Message } from "types/message";
+import { ModalEvents } from "types/modalEvents";
+import { RootActions } from "types/rootActions";
 
 const ONE_MILLION = 1000000.0;
 
@@ -25,7 +25,7 @@ const getFeeValue = (fee: StdFee): number => {
   const coin: Coin = fee.amount[0];
   if (coin === undefined) return 0;
   const numeric = Number(coin.amount);
-  if (isNaN(numeric) === true || numeric === 0) return 0;
+  if (isNaN(numeric) || numeric === 0) return 0;
   return numeric / ONE_MILLION;
 };
 
@@ -98,21 +98,19 @@ const toTransaction = (
 };
 
 export const onSignTx = async (
+  wallet: Wallet,
+  authorizationPath: string | null,
   messages: ReadonlyArray<Msg>,
   fee: StdFee,
   chainId: string,
   memo = "",
   accountNumber: number,
   sequenceNumber: number,
-): Promise<Message> => {
-  const { wallet } = window;
-  const {
-    authorization: { path },
-  } = window.signerConfig;
+): Promise<Message<RootActions, StdSignature | Error>> => {
   const modal = new Modal();
   return new Promise(
     (
-      resolve: (message: Message) => void,
+      resolve: (message: Message<RootActions, StdSignature | Error>) => void,
       reject: (error: any) => void,
     ): void => {
       if (messages.some(isMsgSend)) {
@@ -121,6 +119,7 @@ export const onSignTx = async (
             "[data-key]",
           );
           items.forEach((item: Element): void => {
+            const childNode: Node | null = item.firstElementChild;
             switch (item.getAttribute("data-key")) {
               case "fee":
                 item.appendChild(
@@ -144,10 +143,12 @@ export const onSignTx = async (
                 );
                 break;
               case "entries":
-                item.replaceChild(
-                  buildRecipientsList(item, messages),
-                  item.firstElementChild,
-                );
+                if (childNode !== null) {
+                  item.replaceChild(
+                    buildRecipientsList(item, messages),
+                    childNode,
+                  );
+                }
                 break;
               case "transaction":
                 item.appendChild(
@@ -181,20 +182,43 @@ export const onSignTx = async (
             .then((signature: StdSignature): void => {
               resolve({
                 target: "Root",
-                type: "SendSignedTx",
+                type: RootActions.SendSignature,
                 data: signature,
+              });
+            })
+            .catch((error: Error): void => {
+              resolve({
+                target: "Root",
+                type: RootActions.SendSignature,
+                data: error,
               });
             });
         });
-        modal.open(path, "signer::authorize-signature", 600, 400);
+        if (authorizationPath !== null) {
+          modal.open(
+            authorizationPath,
+            "signer::authorize-signature",
+            600,
+            400,
+          );
+        } else {
+          console.warn("cannot open the authorization modal");
+        }
       } else {
         wallet
           .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)
           .then((signature: StdSignature): void => {
             resolve({
               target: "Root",
-              type: "SendSignedTx",
+              type: RootActions.SendSignature,
               data: signature,
+            });
+          })
+          .catch((error: Error): void => {
+            resolve({
+              target: "Root",
+              type: RootActions.SendSignature,
+              data: error,
             });
           });
       }

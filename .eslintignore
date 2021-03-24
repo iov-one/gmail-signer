@@ -1,1 +1,5 @@
-build/
+lib/
+__tests__/
+webpack.config.js
+.eslintrc.js
+jest.config.js

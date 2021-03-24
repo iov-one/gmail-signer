@@ -1,6 +1,6 @@
 export interface MnemonicData {
   readonly appProperties: {
-    readonly mnemonic: string;
+    readonly seed: string;
   };
 }
 
@@ -21,15 +21,20 @@ export interface FilesData {
 export const isMnemonicSavedData = (
   file: MnemonicSavedData | any,
 ): file is MnemonicSavedData => {
-  return "appProperties" in file && "saved" in file.appProperties;
+  return (
+    "appProperties" in file &&
+    "saved" in (file as MnemonicSavedData).appProperties
+  );
 };
 
 export const isMnemonicData = (
   file: MnemonicData | any,
 ): file is MnemonicData => {
-  return "appProperties" in file && "mnemonic" in file.appProperties;
+  return (
+    "appProperties" in file && "seed" in (file as MnemonicData).appProperties
+  );
 };
 
-export const isFileId = (file: any): file is FileId => {
-  return "id" in file && typeof file.id === "string";
+export const isFileId = (file: any | FileId): file is FileId => {
+  return "id" in file && typeof (file as FileId).id === "string";
 };
