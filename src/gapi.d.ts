@@ -33,7 +33,8 @@ declare namespace gapi {
 
   export interface User extends Observable<User> {
     getBasicProfile(): BasicProfile;
-    getAuthResponse(arg: boolean): GoogleApiAuthResponse;
+    getAuthResponse(includeAuthorizationData: boolean): GoogleApiAuthResponse;
+    getId(): string;
     get(): User;
     isSignedIn(): boolean;
   }
@@ -45,15 +46,18 @@ declare namespace gapi {
 
   export interface InitConfig {
     readonly client_id: string;
-    readonly scope: string;
-    readonly cookiepolicy: "single_host_origin";
-    readonly fetch_basic_profile: boolean;
-    readonly prompt: string;
+    readonly scope?: string;
+    readonly cookiepolicy?: "single_host_origin" | "none";
+    readonly fetch_basic_profile?: boolean;
+    readonly prompt?: string;
+    readonly redirect_uri?: string;
+    readonly ux_mode?: "popup" | "redirect";
   }
 
   export interface Auth {
     readonly currentUser: User;
     readonly isSignedIn: Observable<boolean>;
+    disconnect(): void;
     signIn(): Promise<User>;
 
     init(config: InitConfig): Promise<Auth>;

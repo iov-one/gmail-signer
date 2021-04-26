@@ -30,7 +30,7 @@ export class Wallet {
     }
     const accounts: ReadonlyArray<AccountData> = await wallet.getAccounts();
     // Why would there be more than 1 account?
-    if (accounts.length !== 1) {
+    if (accounts.length === 0) {
       return undefined;
     }
     return accounts[0].address;

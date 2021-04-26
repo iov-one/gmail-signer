@@ -28,33 +28,34 @@ export const isMessage = (
 };
 
 export const isCustodianMessage = (
-  object: Message<CustodianActions> | any,
-): object is Message<CustodianActions> => {
-  if (!isMessage(object)) return false;
+  thing: Message<CustodianActions> | any,
+): thing is Message<CustodianActions> => {
+  if (!isMessage(thing)) return false;
   const actionTypes = Object.values(CustodianActions);
-  return actionTypes.includes(object.type);
+  return actionTypes.includes(thing.type);
 };
 
 export const isSignerMessage = (
-  object: Message<SignerActions> | any,
-): object is Message<SignerActions> => {
-  if (!isMessage(object)) return false;
+  thing: Message<SignerActions> | any,
+): thing is Message<SignerActions> => {
+  if (!isMessage(thing)) return false;
   const actionTypes = Object.values(SignerActions);
-  return actionTypes.includes(object.type);
+  return actionTypes.includes(thing.type);
 };
 
 export const isRootMessage = (
-  object: Message<RootActions> | any,
-): object is Message<RootActions> => {
-  if (!isMessage(object)) return false;
+  thing: Message<RootActions> | any,
+): thing is Message<RootActions> => {
+  if (isErrorMessage(thing)) return true;
+  if (!isMessage(thing)) return false;
   const actionTypes = Object.values(RootActions);
-  return actionTypes.includes(object.type);
+  return actionTypes.includes(thing.type);
 };
 
 export const isErrorMessage = (
-  object: Message<ErrorActions> | any,
-): object is Message<ErrorActions> => {
-  if (!isMessage(object)) return false;
+  thing: Message<ErrorActions> | any,
+): thing is Message<ErrorActions> => {
+  if (!isMessage(thing)) return false;
   const actionTypes = Object.values(ErrorActions);
-  return actionTypes.includes(object.type);
+  return actionTypes.includes(thing.type);
 };
