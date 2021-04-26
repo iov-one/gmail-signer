@@ -6,6 +6,7 @@
   "files": [
     "lib/"
   ],
+  "types": "lib/index.d.ts",
   "scripts": {
     "build": "webpack",
     "deploy": "yarn build && yarn publish",
