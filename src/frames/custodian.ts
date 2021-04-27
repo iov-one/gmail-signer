@@ -19,17 +19,17 @@ import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
 import { transformGooglesResponse } from "frames/custodian/helpers/transformGooglesResponse";
 import { getFrameSpecificData } from "frames/helpers/getFrameSpecificData";
 import { gapi } from "gapi";
+import { SignerConfiguration } from "signer";
 import signer from "templates/signer.html";
 import { ActionType } from "types/actionType";
-import { Config } from "types/config";
 import { CustodianActions } from "types/custodianActions";
 import { ErrorActions } from "types/errorActions";
 import { GenericMessage } from "types/genericMessage";
-import { GoogleAuthInfo } from "types/gogoleAuthInfo";
 import {
   GoogleAccessToken,
   isGoogleAccessToken,
 } from "types/googleAccessToken";
+import { GoogleAuthInfo } from "types/googleAuthInfo";
 import { isGoogleAuthError } from "types/googleOAuthError";
 import {
   isCustodianMessage,
@@ -55,11 +55,7 @@ const moduleGlobals: { accessToken: GoogleAccessToken | null } = {
 const signOutFromGoogle = async (): Promise<void> => {
   const { auth2 } = gapi;
   const instance: Auth = auth2.getAuthInstance();
-  return new Promise((resolve: () => void): void => {
-    setTimeout((): void => {
-      instance.signOut().then(resolve).catch(console.warn);
-    }, 0);
-  });
+  return instance.signOut();
 };
 
 const handleMessage = async (
@@ -259,15 +255,10 @@ const setupGoogleApi = async (
 };
 
 const createSignerAndInstallMessagesHandler = async (): Promise<void> => {
-  const frame: HTMLIFrameElement = await sandboxFrame(
-    document.getElementById("signer-frame") as HTMLIFrameElement,
-    signer,
-    "signer",
-  );
-  const config = await getFrameSpecificData<Config>();
-  const { clientID } = config;
+  const frame: HTMLIFrameElement = await sandboxFrame(signer, "signer");
+  const { googleClientID } = await getFrameSpecificData<SignerConfiguration>();
   // Setup the google api stuff
-  await setupGoogleApi(frame, clientID);
+  await setupGoogleApi(frame, googleClientID);
   // Attach the event listener for message exchange
   window.addEventListener("message", createMessageCallback(onMessage));
   // Finally announce initialization

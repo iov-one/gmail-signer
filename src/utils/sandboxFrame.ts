@@ -2,11 +2,15 @@ import { FRAME_CREATED_AND_LOADED } from "frames/constants";
 import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 
 export const sandboxFrame = async (
-  frame: HTMLIFrameElement,
   content: string,
   key: string,
   extraPermissions: ReadonlyArray<string> = [],
 ): Promise<HTMLIFrameElement> => {
+  const { body } = document;
+  // Create the iframe
+  const frame: HTMLIFrameElement = document.createElement("iframe");
+  // Append the iframe to the body object
+  body.appendChild(frame);
   const permissions: ReadonlyArray<string> = [
     ...extraPermissions,
     "allow-scripts",

@@ -6,21 +6,18 @@ import {
   CUSTODIAN_AUTH_STARTED_EVENT,
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
-  FRAME_GET_SPECIFIC_DATA,
-  FRAME_SEND_SPECIFIC_DATA,
 } from "frames/constants";
-import content from "templates/custodian.html";
+import custodian from "templates/custodian.html";
 import { ActionType } from "types/actionType";
 import { CommonError } from "types/commonError";
-import { Config } from "types/config";
 import { CustodianActions } from "types/custodianActions";
 import { ErrorActions } from "types/errorActions";
+import { FrameDataListener } from "types/frameDataListener";
 import { GenericMessage } from "types/genericMessage";
 import { isErrorMessage, Message } from "types/message";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
 import { Tx } from "types/tx";
-import { VoidCallback } from "types/voidCallback";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 import { isError } from "utils/isError";
@@ -45,10 +42,12 @@ export enum SignerState {
   BrowserProbablyBlockingContent,
 }
 
-export interface SignerConfig {
+export interface SignerConfiguration {
   readonly authorization: {
     readonly path: string;
   };
+  readonly googleClientID: string;
+  readonly mnemonicLength: 12 | 24;
 }
 
 interface PromiseResolver {
@@ -57,7 +56,7 @@ interface PromiseResolver {
 }
 
 export class Signer {
-  private readonly signerConfig: SignerConfig;
+  private readonly configuration: SignerConfiguration;
   private custodian: HTMLIFrameElement | null = null;
   private resolvers: { [id: string]: PromiseResolver } = {};
   private stateChangeListener?: StateChangeHandler;
@@ -65,12 +64,39 @@ export class Signer {
   private setAuthButtonNotInitialized: (
     error: Error | string,
   ) => void = (): void => {};
-  public disconnect: () => void = () => {};
 
-  constructor(config: SignerConfig) {
-    this.signerConfig = config;
-    // These are added for ever
+  constructor(config: SignerConfiguration) {
+    this.configuration = config;
     window.addEventListener("message", this.onMessage);
+  }
+
+  /**
+   * Create the iframe and attach it to the DOM
+   */
+  public async attach(): Promise<void> {
+    // Provide the necessary information
+    const cleanUp = createTemporaryMessageListener(
+      new FrameDataListener(this.configuration),
+    );
+    // Sandbox the iframe
+    try {
+      this.custodian = await sandboxFrame(custodian, "custodian", [
+        "allow-popups",
+      ]);
+    } finally {
+      cleanUp();
+    }
+  }
+
+  /**
+   * Detach the iframe from the DOM
+   */
+  public detach(): void {
+    const { custodian } = this;
+    if (custodian !== null) {
+      window.removeEventListener("message", this.onMessage);
+      custodian.remove();
+    }
   }
 
   /**
@@ -108,6 +134,7 @@ export class Signer {
           this.setState(SignerState.SignerReady);
           break;
         case RootActions.SignedOut:
+          this.forwardMessageToPromiseResolver(message);
           this.setState(SignerState.SignedOut);
           break;
         case RootActions.SendSignature:
@@ -242,6 +269,14 @@ export class Signer {
           resolve,
           reject,
         };
+        setTimeout((): void => {
+          if (this.resolvers[uid]) {
+            console.warn(
+              `a resolver for ${uid} was not called within 4 seconds`,
+            );
+            delete this.resolvers[uid];
+          }
+        }, 4000);
         sendMessage<A, D>(targetWindow, {
           ...message,
           // With this we'll know to whom it goes
@@ -313,40 +348,10 @@ export class Signer {
    * This function initializes the whole flow that allows the user to authenticate with
    * Google and authorize the library to securely manage their mnemonic string
    *
-   * @param custodian The iframe that you want to use as container. Your application must take care of the
-   *                  lifecycle of it
    * @param button The button which when clicked would trigger a sign-in flow
-   * @param config Google's configuration for OAuth + a button to attach to the sign-in flow
    */
-  public connect = async (
-    custodian: HTMLIFrameElement,
-    button: HTMLElement,
-    config: Config,
-  ): Promise<void> => {
-    const unsubscribers: Array<VoidCallback> = [];
+  public connect(button: HTMLElement): () => void {
     this.setState(SignerState.Loading);
-    // This handler just expects the created window
-    unsubscribers.push(
-      createTemporaryMessageListener(
-        (source: Window, data?: string): boolean => {
-          if (data === FRAME_GET_SPECIFIC_DATA) {
-            source.postMessage(
-              {
-                type: FRAME_SEND_SPECIFIC_DATA,
-                data: config,
-              },
-              location.origin,
-            );
-            return true;
-          }
-          return false;
-        },
-      ),
-    );
-    console.log("sandboxing it");
-    this.custodian = await sandboxFrame(custodian, content, "custodian", [
-      "allow-popups",
-    ]);
     // Setup the actual sign in flow trigger and the actual event
     // handler
     const targetWindow: Window = this.getCustodianWindow();
@@ -359,23 +364,19 @@ export class Signer {
       );
     };
     // Start listening on the authentication events
-    unsubscribers.push(
-      createTemporaryMessageListener<GenericMessage>(this.onAuthEvent),
+    const cleanUp = createTemporaryMessageListener<GenericMessage>(
+      this.onAuthEvent,
     );
     button.addEventListener("click", requestSignIn);
-    // Also add to the "unsubscribers"
-    unsubscribers.push((): void =>
-      button.removeEventListener("click", requestSignIn),
-    );
     // Reset the state now
     this.setState(SignerState.ReadyToSignIn);
     // Return the cancellable thing now
     // Prepare the promise to be cancelled
-    this.disconnect = (): void => {
-      // Other temporary listener might still listen
-      unsubscribers.forEach((unsubscribe: VoidCallback): void => unsubscribe());
+    return (): void => {
+      button.removeEventListener("click", requestSignIn);
+      cleanUp();
     };
-  };
+  }
 
   /**
    * Set state change handler
@@ -404,7 +405,6 @@ export class Signer {
       target: "Custodian",
       type: CustodianActions.SignOut,
     });
-    this.disconnect();
   };
 
   /**
