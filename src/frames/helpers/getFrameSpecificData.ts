@@ -3,7 +3,7 @@ import {
   FRAME_SEND_SPECIFIC_DATA,
 } from "frames/constants";
 import { GenericMessage } from "types/genericMessage";
-import { createTemporaryMessageHandler } from "utils/createTemporaryMessageHandler";
+import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 
 export const getFrameSpecificData = async <T>(): Promise<T> => {
   // FIXME: should reject if we don't get the message in a certain time?
@@ -12,7 +12,7 @@ export const getFrameSpecificData = async <T>(): Promise<T> => {
       const timer = setTimeout((): void => {
         reject(new Error("timed out waiting for the frame data"));
       }, 3000);
-      createTemporaryMessageHandler(
+      createTemporaryMessageListener(
         (source: Window, message?: GenericMessage<T>): boolean => {
           if (message === undefined) {
             reject(

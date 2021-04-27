@@ -12,7 +12,7 @@ import { Tx } from "types/tx";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
 
-const ModuleGlobals: { wallet: Wallet; authorizationPath: string | null } = {
+const moduleGlobals: { wallet: Wallet; authorizationPath: string | null } = {
   wallet: new Wallet(),
   authorizationPath: null,
 };
@@ -27,7 +27,7 @@ const handleMessage = async (
   switch (message.type) {
     case SignerActions.Initialize:
       if (typeof data === "string") {
-        return onInitialize(ModuleGlobals.wallet, data);
+        return onInitialize(moduleGlobals.wallet, data);
       } else {
         return {
           target: "Root",
@@ -41,8 +41,8 @@ const handleMessage = async (
       try {
         if (typeof data !== "string" && typeof data !== "undefined") {
           return onSignTx(
-            ModuleGlobals.wallet,
-            ModuleGlobals.authorizationPath,
+            moduleGlobals.wallet,
+            moduleGlobals.authorizationPath,
             data.messages,
             data.fee,
             data.chainId,
@@ -67,7 +67,7 @@ const handleMessage = async (
         };
       }
     case SignerActions.GetAddress:
-      return onGetAddress(ModuleGlobals.wallet);
+      return onGetAddress(moduleGlobals.wallet);
     default:
       console.warn(`unknown message: ${message.type as string}`);
       return null;

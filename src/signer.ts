@@ -6,54 +6,48 @@ import {
   CUSTODIAN_AUTH_STARTED_EVENT,
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
-  FRAME_GET_SPECIFIC_DATA,
-  FRAME_SEND_SPECIFIC_DATA,
 } from "frames/constants";
-import content from "templates/custodian.html";
+import custodian from "templates/custodian.html";
 import { ActionType } from "types/actionType";
 import { CommonError } from "types/commonError";
-import { Config } from "types/config";
 import { CustodianActions } from "types/custodianActions";
 import { ErrorActions } from "types/errorActions";
+import { FrameDataListener } from "types/frameDataListener";
 import { GenericMessage } from "types/genericMessage";
 import { isErrorMessage, Message } from "types/message";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
 import { Tx } from "types/tx";
 import { createMessageCallback } from "utils/createMessageCallback";
-import { createSandboxedIframe } from "utils/createSandboxedIframe";
-import { createTemporaryMessageHandler } from "utils/createTemporaryMessageHandler";
+import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 import { isError } from "utils/isError";
+import { sandboxFrame } from "utils/sandboxFrame";
 import { sendMessage } from "utils/sendMessage";
 import * as uuid from "uuid";
 
-type EventHandler = (...args: any[]) => void;
-
-type StateChangeHandlerFn = (state: SignerState) => void;
+type StateChangeHandler = <T>(state: SignerState, data: T) => void;
 
 export enum SignerState {
   Loading,
   ReadyToSignIn,
   Sandboxed,
   Authenticated,
-  PreparingSigner,
   SignedOut,
   SignerReady,
   Authenticating,
   AuthenticationCompleted,
   Failed,
   CancelledByUser,
+  BlockedByBrowser,
   BrowserProbablyBlockingContent,
 }
 
-export interface SignerConfig {
+export interface SignerConfiguration {
   readonly authorization: {
     readonly path: string;
   };
-}
-
-export enum Events {
-  StateChange = "statechange",
+  readonly googleClientID: string;
+  readonly mnemonicLength: 12 | 24;
 }
 
 interface PromiseResolver {
@@ -62,41 +56,62 @@ interface PromiseResolver {
 }
 
 export class Signer {
-  private readonly signerConfig: SignerConfig;
-  private custodianFrame: HTMLIFrameElement | null = null;
-  private config: Config | null = null;
+  private readonly configuration: SignerConfiguration;
+  private custodian: HTMLIFrameElement | null = null;
   private resolvers: { [id: string]: PromiseResolver } = {};
-  private eventHandlers: {
-    [event in Events]?: (...args: any) => any;
-  } = {
-    [Events.StateChange]: undefined,
-  };
+  private stateChangeListener?: StateChangeHandler;
   private setAuthButtonReady: () => void = (): void => {};
   private setAuthButtonNotInitialized: (
     error: Error | string,
   ) => void = (): void => {};
 
-  constructor(config: SignerConfig) {
-    this.signerConfig = config;
+  constructor(config: SignerConfiguration) {
+    this.configuration = config;
+    window.addEventListener("message", this.onMessage);
+  }
+
+  /**
+   * Create the iframe and attach it to the DOM
+   */
+  public async attach(): Promise<void> {
+    // Provide the necessary information
+    const cleanUp = createTemporaryMessageListener(
+      new FrameDataListener(this.configuration),
+    );
+    // Sandbox the iframe
+    try {
+      this.custodian = await sandboxFrame(custodian, "custodian", [
+        "allow-popups",
+      ]);
+    } finally {
+      cleanUp();
+    }
+  }
+
+  /**
+   * Detach the iframe from the DOM
+   */
+  public detach(): void {
+    const { custodian } = this;
+    if (custodian !== null) {
+      window.removeEventListener("message", this.onMessage);
+      custodian.remove();
+    }
   }
 
   /**
    * Replaces current state and allows the UI to react upon the change
    *
    * @param state The new state that will replace the old
+   * @param data Data associated with the event if any
    *
    * @private
    */
-  private setState = (state: SignerState): void => {
-    const handlers: ReadonlyArray<StateChangeHandlerFn | undefined> = [
-      this.eventHandlers[Events.StateChange],
-    ];
-    handlers.forEach((handler: StateChangeHandlerFn | undefined): void => {
-      if (handler !== undefined) {
-        // Call the handler for it
-        handler(state);
-      }
-    });
+  private setState = <T>(state: SignerState, data?: T): void => {
+    const { stateChangeListener } = this;
+    if (stateChangeListener !== undefined) {
+      stateChangeListener(state, data);
+    }
   };
 
   /**
@@ -119,6 +134,7 @@ export class Signer {
           this.setState(SignerState.SignerReady);
           break;
         case RootActions.SignedOut:
+          this.forwardMessageToPromiseResolver(message);
           this.setState(SignerState.SignedOut);
           break;
         case RootActions.SendSignature:
@@ -209,19 +225,20 @@ export class Signer {
         // Now resolve the promise
         resolver.resolve(message.data);
         // Remove the resolver now
+        delete this.resolvers[uid];
       }
     }
   };
 
   private getCustodianWindow(): Window {
-    const { custodianFrame } = this;
-    if (custodianFrame === null) {
+    const { custodian } = this;
+    if (custodian === null) {
       throw new Error("custodian frame not initialized");
     }
-    if (custodianFrame.contentWindow === null) {
+    if (custodian.contentWindow === null) {
       throw new Error("custodian frame has no window attached");
     }
-    return custodianFrame.contentWindow;
+    return custodian.contentWindow;
   }
 
   /**
@@ -252,6 +269,14 @@ export class Signer {
           resolve,
           reject,
         };
+        setTimeout((): void => {
+          if (this.resolvers[uid]) {
+            console.warn(
+              `a resolver for ${uid} was not called within 4 seconds`,
+            );
+            delete this.resolvers[uid];
+          }
+        }, 4000);
         sendMessage<A, D>(targetWindow, {
           ...message,
           // With this we'll know to whom it goes
@@ -268,7 +293,7 @@ export class Signer {
    */
   private onAuthEvent = (
     source: Window,
-    message?: GenericMessage<string | undefined>,
+    message?: GenericMessage<any>,
   ): boolean => {
     const custodianWindow = this.getCustodianWindow();
     if (source !== custodianWindow || message === undefined) {
@@ -287,7 +312,7 @@ export class Signer {
         this.setAuthButtonReady();
         break;
       case CUSTODIAN_AUTH_SUCCEEDED_EVENT:
-        this.setState(SignerState.Authenticated);
+        this.setState(SignerState.Authenticated, message.data);
         return true;
       case CUSTODIAN_AUTH_FAILED_EVENT:
         if (isErrorMessage(message)) {
@@ -298,6 +323,8 @@ export class Signer {
         } else if (typeof message.data === "string") {
           if (message.data === "popup_closed_by_user") {
             this.setState(SignerState.CancelledByUser);
+          } else if (message.data === "popup_blocked_by_browser") {
+            this.setState(SignerState.BlockedByBrowser);
           } else if (message.data === "user_logged_out") {
             // Interesting: means that the user didn't actually login
             this.setState(SignerState.BrowserProbablyBlockingContent);
@@ -322,90 +349,52 @@ export class Signer {
    * Google and authorize the library to securely manage their mnemonic string
    *
    * @param button The button which when clicked would trigger a sign-in flow
-   * @param config Google's configuration for OAuth + a button to attach to the sign-in flow
    */
-  public connect = async (
-    button: HTMLElement,
-    config: Config,
-  ): Promise<void> => {
+  public connect(button: HTMLElement): () => void {
     this.setState(SignerState.Loading);
-    // Export google config to the class level
-    this.config = config;
-    // This handler just expects the created window
-    createTemporaryMessageHandler((source: Window, data?: string): boolean => {
-      if (data === FRAME_GET_SPECIFIC_DATA) {
-        source.postMessage(
-          {
-            type: FRAME_SEND_SPECIFIC_DATA,
-            data: {
-              clientID: config.clientID,
-            },
-          },
-          location.origin,
-        );
-        return true;
-      }
-      return false;
-    });
-    // Create the custodian window
-    this.custodianFrame = await createSandboxedIframe(content, "custodian", [
-      "allow-popups",
-    ]);
     // Setup the actual sign in flow trigger and the actual event
     // handler
     const targetWindow: Window = this.getCustodianWindow();
-    // On clicking the button, ask the custodian to sign in
-    button.addEventListener("click", (): void => {
+    const requestSignIn = (): void => {
       targetWindow.postMessage(
         {
           type: CUSTODIAN_SIGN_IN_REQUEST,
         },
         location.origin,
       );
-    });
+    };
     // Start listening on the authentication events
-    createTemporaryMessageHandler<GenericMessage<string | undefined>>(
+    const cleanUp = createTemporaryMessageListener<GenericMessage>(
       this.onAuthEvent,
     );
-    // Listen to messages too
-    window.addEventListener("message", this.onMessage);
+    button.addEventListener("click", requestSignIn);
     // Reset the state now
     this.setState(SignerState.ReadyToSignIn);
-  };
-
-  public disconnect = (): void => {
-    const parent: HTMLElement = document.body;
-    if (parent !== null && this.custodianFrame !== null) {
-      // Remove the iframe from the body of the document
-      parent.removeChild(this.custodianFrame);
-    }
-    // Remove listeners
-    window.removeEventListener("message", this.onMessage);
-  };
+    // Return the cancellable thing now
+    // Prepare the promise to be cancelled
+    return (): void => {
+      button.removeEventListener("click", requestSignIn);
+      cleanUp();
+    };
+  }
 
   /**
-   * Set event listeners for the various types of events that are generated
-   * during the flow
+   * Set state change handler
    *
-   * @param event The name of the event that will be attached to the event handler
    * @param handler The handler that will be called when the event is generated
    *
    * Note: we allow one listener per event because as of now it does not make
    *       sense to have more than one listener per event.
    */
-  public on = (event: Events, handler: EventHandler): void => {
-    this.eventHandlers[event] = handler;
+  public setStateChangeListener = (handler: StateChangeHandler): void => {
+    this.stateChangeListener = handler;
   };
 
   /**
    * Remove the event listener for this event
-   *
-   * @param event The name of the event to disconnect the listener from
    */
-  public off = (event: Events): void => {
-    if (event in this.eventHandlers) {
-      delete this.eventHandlers[event];
-    }
+  public removeStateChangeListener = (): void => {
+    this.stateChangeListener = undefined;
   };
 
   /**
@@ -416,7 +405,6 @@ export class Signer {
       target: "Custodian",
       type: CustodianActions.SignOut,
     });
-    this.disconnect();
   };
 
   /**
@@ -465,6 +453,10 @@ export class Signer {
     );
   };
 
+  /**
+   * Return whether the user has confirmed saving the mnemonic phrase in a safe
+   * location or physically
+   */
   public async isMnemonicSafelyStored(): Promise<boolean> {
     return this.sendMessageAndPromiseToRespond<boolean, CustodianActions>({
       target: "Custodian",
@@ -473,6 +465,15 @@ export class Signer {
     });
   }
 
+  /**
+   * Request the library to display the mnemonic phrase at the specified [path]
+   *
+   * The specified route must contain certain elements with specific attributes
+   * that will be looked up and populated by the library
+   *
+   * @param path The route in your application which would render the mnemonic
+   *             phrase
+   */
   public showMnemonic(path: string): Promise<boolean> {
     return this.sendMessageAndPromiseToRespond<
       boolean,

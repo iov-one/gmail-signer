@@ -1,3 +1,5 @@
+import { VoidCallback } from "types/voidCallback";
+
 const isTrustedSource = (event: MessageEvent): boolean => {
   if (event.source === parent) return true;
   for (let i = 0; i < frames.length; ++i) {
@@ -13,13 +15,14 @@ const isTrustedOrigin = (event: MessageEvent): boolean => {
 };
 
 const isWindow = (value: any | Window): value is Window => {
+  if (value === null) return false;
   return "postMessage" in value;
 };
 
-export const createTemporaryMessageHandler = <T>(
+export const createTemporaryMessageListener = <T>(
   handler: (source: Window, data?: T) => Promise<boolean> | boolean,
   originSpecificHandlers: { [origin: string]: (data: any) => boolean } = {},
-): void => {
+): VoidCallback => {
   const asyncHandler = async (event: MessageEvent): Promise<void> => {
     const originSpecificHandler: ((data: any) => boolean) | undefined =
       originSpecificHandlers[event.origin];
@@ -47,4 +50,7 @@ export const createTemporaryMessageHandler = <T>(
     void asyncHandler(event);
   };
   window.addEventListener("message", syncHandler);
+  return (): void => {
+    window.removeEventListener("message", syncHandler);
+  };
 };

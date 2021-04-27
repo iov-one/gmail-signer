@@ -1,2 +1,2 @@
-export { Signer, Events, SignerState } from "signer";
-export { Config } from "types/config";
+export { Signer, SignerState } from "signer";
+export { GoogleAuthInfo } from "types/googleAuthInfo";

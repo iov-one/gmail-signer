@@ -1,6 +1,7 @@
 import { propertyExistsAndHasType } from "utils/propertyExistsAndHasType";
 
 export interface GoogleUser {
+  readonly id: string;
   readonly firstName: string;
   readonly lastName: string;
   readonly email: string;
