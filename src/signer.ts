@@ -18,6 +18,7 @@ import { isErrorMessage, Message } from "types/message";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
 import { Tx } from "types/tx";
+import { TxSignRequest } from "types/txSignRequest";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 import { isError } from "utils/isError";
@@ -30,6 +31,7 @@ type StateChangeHandler = <T>(state: SignerState, data: T) => void;
 export enum SignerState {
   Loading,
   ReadyToSignIn,
+  SignatureRequestRejected,
   Sandboxed,
   Authenticated,
   SignedOut,
@@ -246,6 +248,7 @@ export class Signer {
    * we can forward to response to the resolver and resolve/reject the promise
    *
    * @param message The message we are sending as a promise
+   * @param timeout Time to wait for the response, < 0 means infinite
    *
    * @private
    */
@@ -255,6 +258,7 @@ export class Signer {
     D = undefined
   >(
     message: Message<A, D>,
+    timeout = 4000,
   ): Promise<T> => {
     const uid: string = uuid.v4();
     const targetWindow: Window = this.getCustodianWindow();
@@ -269,14 +273,16 @@ export class Signer {
           resolve,
           reject,
         };
-        setTimeout((): void => {
-          if (this.resolvers[uid]) {
-            console.warn(
-              `a resolver for ${uid} was not called within 4 seconds`,
-            );
-            delete this.resolvers[uid];
-          }
-        }, 4000);
+        if (timeout > 0) {
+          setTimeout((): void => {
+            if (this.resolvers[uid]) {
+              console.warn(
+                `a resolver for ${uid} was not called within 4 seconds`,
+              );
+              delete this.resolvers[uid];
+            }
+          }, timeout);
+        }
         sendMessage<A, D>(targetWindow, {
           ...message,
           // With this we'll know to whom it goes
@@ -436,6 +442,7 @@ export class Signer {
     accountNumber: string,
     sequence: string,
   ): Promise<StdSignature> => {
+    const { authorization } = this.configuration;
     const tx: Tx = {
       messages: messages,
       fee: fee,
@@ -444,12 +451,20 @@ export class Signer {
       accountNumber: accountNumber,
       sequence: sequence,
     };
-    return this.sendMessageAndPromiseToRespond<StdSignature, SignerActions, Tx>(
+    return this.sendMessageAndPromiseToRespond<
+      StdSignature,
+      SignerActions,
+      TxSignRequest
+    >(
       {
         target: "Signer",
         type: SignerActions.SignTx,
-        data: tx,
+        data: {
+          transaction: tx,
+          authorizationPath: authorization.path,
+        },
       },
+      -1 /* We need to wait forever */,
     );
   };
 

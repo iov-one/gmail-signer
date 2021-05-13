@@ -8,6 +8,7 @@ import {
 } from "@cosmjs/launchpad";
 import { Wallet } from "frames/signer/wallet";
 import { Modal } from "modal";
+import { ErrorActions } from "types/errorActions";
 import { Message } from "types/message";
 import { ModalEvents } from "types/modalEvents";
 import { RootActions } from "types/rootActions";
@@ -19,6 +20,8 @@ const Formatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 6,
   useGrouping: true,
 });
+
+const rejectedError = new Error("rejected");
 
 const getFeeValue = (fee: StdFee): number => {
   if (fee.amount === undefined) return 0 /* Should probably throw */;
@@ -97,6 +100,85 @@ const toTransaction = (
   };
 };
 
+const isAuthorized = (
+  authorizationPath: string | null,
+  messages: ReadonlyArray<Msg>,
+  fee: StdFee,
+  chainId: string,
+  memo = "",
+  accountNumber: number,
+  sequenceNumber: number,
+): Promise<boolean> => {
+  const modal = new Modal();
+  return new Promise((resolve: (value: boolean) => void): void => {
+    modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
+      const items: NodeListOf<Element> = document.querySelectorAll(
+        "[data-key]",
+      );
+      items.forEach((item: Element): void => {
+        const childNode: Node | null = item.firstElementChild;
+        switch (item.getAttribute("data-key")) {
+          case "fee":
+            item.appendChild(
+              document.createTextNode(Formatter.format(getFeeValue(fee))),
+            );
+            break;
+          case "total":
+            item.appendChild(
+              document.createTextNode(
+                Formatter.format(getTotalAmount(messages) + getFeeValue(fee)),
+              ),
+            );
+            break;
+          case "sum":
+            item.appendChild(
+              document.createTextNode(
+                Formatter.format(getTotalAmount(messages)),
+              ),
+            );
+            break;
+          case "entries":
+            if (childNode !== null) {
+              item.replaceChild(buildRecipientsList(item, messages), childNode);
+            }
+            break;
+          case "transaction":
+            item.appendChild(
+              document.createTextNode(
+                JSON.stringify(
+                  toTransaction(
+                    messages,
+                    fee,
+                    memo,
+                    chainId,
+                    accountNumber,
+                    sequenceNumber,
+                  ),
+                  null,
+                  " ",
+                ),
+              ),
+            );
+            break;
+        }
+      });
+    });
+    modal.on(ModalEvents.Rejected, (): void => {
+      modal.close();
+      resolve(false);
+    });
+    modal.on(ModalEvents.Accepted, (): void => {
+      modal.close();
+      resolve(true);
+    });
+    if (authorizationPath !== null) {
+      modal.open(authorizationPath, "signer::authorize-signature", 600, 400);
+    } else {
+      console.warn("cannot open the authorization modal");
+    }
+  });
+};
+
 export const onSignTx = async (
   wallet: Wallet,
   authorizationPath: string | null,
@@ -106,122 +188,55 @@ export const onSignTx = async (
   memo = "",
   accountNumber: number,
   sequenceNumber: number,
-): Promise<Message<RootActions, StdSignature | Error>> => {
-  const modal = new Modal();
-  return new Promise(
-    (
-      resolve: (message: Message<RootActions, StdSignature | Error>) => void,
-      reject: (error: any) => void,
-    ): void => {
-      if (messages.some(isMsgSend)) {
-        modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
-          const items: NodeListOf<Element> = document.querySelectorAll(
-            "[data-key]",
-          );
-          items.forEach((item: Element): void => {
-            const childNode: Node | null = item.firstElementChild;
-            switch (item.getAttribute("data-key")) {
-              case "fee":
-                item.appendChild(
-                  document.createTextNode(Formatter.format(getFeeValue(fee))),
-                );
-                break;
-              case "total":
-                item.appendChild(
-                  document.createTextNode(
-                    Formatter.format(
-                      getTotalAmount(messages) + getFeeValue(fee),
-                    ),
-                  ),
-                );
-                break;
-              case "sum":
-                item.appendChild(
-                  document.createTextNode(
-                    Formatter.format(getTotalAmount(messages)),
-                  ),
-                );
-                break;
-              case "entries":
-                if (childNode !== null) {
-                  item.replaceChild(
-                    buildRecipientsList(item, messages),
-                    childNode,
-                  );
-                }
-                break;
-              case "transaction":
-                item.appendChild(
-                  document.createTextNode(
-                    JSON.stringify(
-                      toTransaction(
-                        messages,
-                        fee,
-                        memo,
-                        chainId,
-                        accountNumber,
-                        sequenceNumber,
-                      ),
-                      null,
-                      " ",
-                    ),
-                  ),
-                );
-                break;
-            }
-          });
-        });
-        modal.on(ModalEvents.Rejected, (): void => {
-          modal.close();
-          reject(new Error("You just rejected to sign the transaction"));
-        });
-        modal.on(ModalEvents.Accepted, (): void => {
-          modal.close();
-          wallet
-            .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)
-            .then((signature: StdSignature): void => {
-              resolve({
-                target: "Root",
-                type: RootActions.SendSignature,
-                data: signature,
-              });
-            })
-            .catch((error: Error): void => {
-              resolve({
-                target: "Root",
-                type: RootActions.SendSignature,
-                data: error,
-              });
-            });
-        });
-        if (authorizationPath !== null) {
-          modal.open(
-            authorizationPath,
-            "signer::authorize-signature",
-            600,
-            400,
-          );
-        } else {
-          console.warn("cannot open the authorization modal");
-        }
-      } else {
-        wallet
-          .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)
-          .then((signature: StdSignature): void => {
-            resolve({
-              target: "Root",
-              type: RootActions.SendSignature,
-              data: signature,
-            });
-          })
-          .catch((error: Error): void => {
-            resolve({
-              target: "Root",
-              type: RootActions.SendSignature,
-              data: error,
-            });
-          });
-      }
-    },
-  );
+): Promise<
+  Message<RootActions, StdSignature> | Message<ErrorActions, Error>
+> => {
+  const sign = async (): Promise<
+    Message<RootActions, StdSignature> | Message<ErrorActions, Error>
+  > => {
+    try {
+      const signature: StdSignature = await wallet.sign(
+        messages,
+        fee,
+        chainId,
+        memo,
+        accountNumber,
+        sequenceNumber,
+      );
+      return {
+        target: "Root",
+        type: RootActions.SendSignature,
+        data: signature,
+      };
+    } catch (error) {
+      return {
+        target: "Root",
+        type: ErrorActions.Forwarded,
+        data: error as Error,
+      };
+    }
+  };
+  if (messages.some(isMsgSend)) {
+    if (
+      await isAuthorized(
+        authorizationPath,
+        messages,
+        fee,
+        chainId,
+        memo,
+        accountNumber,
+        sequenceNumber,
+      )
+    ) {
+      return sign();
+    } else {
+      return {
+        target: "Root",
+        type: ErrorActions.Forwarded,
+        data: rejectedError,
+      };
+    }
+  } else {
+    return sign();
+  }
 };
