@@ -20,6 +20,8 @@ const Formatter = new Intl.NumberFormat(undefined, {
   useGrouping: true,
 });
 
+const rejectedError = new Error("rejected");
+
 const getFeeValue = (fee: StdFee): number => {
   if (fee.amount === undefined) return 0 /* Should probably throw */;
   const coin: Coin = fee.amount[0];
@@ -111,8 +113,25 @@ export const onSignTx = async (
   return new Promise(
     (
       resolve: (message: Message<RootActions, StdSignature | Error>) => void,
-      reject: (error: any) => void,
     ): void => {
+      const sign = (): void => {
+        wallet
+          .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)
+          .then((signature: StdSignature): void => {
+            resolve({
+              target: "Root",
+              type: RootActions.SendSignature,
+              data: signature,
+            });
+          })
+          .catch((error: Error): void => {
+            resolve({
+              target: "Root",
+              type: RootActions.SendSignature,
+              data: error,
+            });
+          });
+      };
       if (messages.some(isMsgSend)) {
         modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
           const items: NodeListOf<Element> = document.querySelectorAll(
@@ -173,26 +192,15 @@ export const onSignTx = async (
         });
         modal.on(ModalEvents.Rejected, (): void => {
           modal.close();
-          reject(new Error("You just rejected to sign the transaction"));
+          resolve({
+            target: "Root",
+            type: RootActions.SendSignature,
+            data: rejectedError,
+          });
         });
         modal.on(ModalEvents.Accepted, (): void => {
           modal.close();
-          wallet
-            .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)
-            .then((signature: StdSignature): void => {
-              resolve({
-                target: "Root",
-                type: RootActions.SendSignature,
-                data: signature,
-              });
-            })
-            .catch((error: Error): void => {
-              resolve({
-                target: "Root",
-                type: RootActions.SendSignature,
-                data: error,
-              });
-            });
+          sign();
         });
         if (authorizationPath !== null) {
           modal.open(
@@ -205,22 +213,7 @@ export const onSignTx = async (
           console.warn("cannot open the authorization modal");
         }
       } else {
-        wallet
-          .sign(messages, fee, chainId, memo, accountNumber, sequenceNumber)
-          .then((signature: StdSignature): void => {
-            resolve({
-              target: "Root",
-              type: RootActions.SendSignature,
-              data: signature,
-            });
-          })
-          .catch((error: Error): void => {
-            resolve({
-              target: "Root",
-              type: RootActions.SendSignature,
-              data: error,
-            });
-          });
+        sign();
       }
     },
   );

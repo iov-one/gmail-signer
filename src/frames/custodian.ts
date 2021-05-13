@@ -5,6 +5,7 @@ import {
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
   FRAME_CREATED_AND_LOADED,
+  FRAME_SEND_SPECIFIC_DATA,
 } from "frames/constants";
 import { GDriveApi } from "frames/custodian/gDriveApi";
 import { onAbandon } from "frames/custodian/handlers/onAbandon";
@@ -255,8 +256,8 @@ const setupGoogleApi = async (
 };
 
 const createSignerAndInstallMessagesHandler = async (): Promise<void> => {
-  const frame: HTMLIFrameElement = await sandboxFrame(signer, "signer");
   const { googleClientID } = await getFrameSpecificData<SignerConfiguration>();
+  const frame: HTMLIFrameElement = await sandboxFrame(signer, "signer");
   // Setup the google api stuff
   await setupGoogleApi(frame, googleClientID);
   // Attach the event listener for message exchange

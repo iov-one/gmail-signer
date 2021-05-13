@@ -54,19 +54,15 @@ export class Modal {
     const accepts: NodeListOf<HTMLElement> = document.querySelectorAll(
       "[data-button='accept']",
     );
-    const rejects: NodeListOf<Element> = document.querySelectorAll(
+    const rejects: NodeListOf<HTMLElement> = document.querySelectorAll(
       "[data-button='reject']",
     );
     accepts.forEach((accept: HTMLElement): void => {
       accept.onclick = (): void => this.accept();
     });
     // We allow multiple reject buttons
-    rejects.forEach((reject: Element): void => {
-      if (reject instanceof HTMLElement) {
-        reject.onclick = (): void => this.reject();
-      } else {
-        console.warn("reject element is not a html element");
-      }
+    rejects.forEach((reject: HTMLElement): void => {
+      reject.onclick = (): void => this.reject();
     });
     // In case the caller wants to do something, let's allow them
     this.invokeHandler(ModalEvents.Loaded, document);

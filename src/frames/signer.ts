@@ -9,6 +9,7 @@ import { Message } from "types/message";
 import { RootActions } from "types/rootActions";
 import { SignerActions } from "types/signerActions";
 import { Tx } from "types/tx";
+import { isTxSignRequest } from "types/txSignRequest";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
 
@@ -39,24 +40,23 @@ const handleMessage = async (
       }
     case SignerActions.SignTx:
       try {
-        if (typeof data !== "string" && typeof data !== "undefined") {
+        if (isTxSignRequest(data)) {
+          const tx: Tx = data.transaction;
           return onSignTx(
             moduleGlobals.wallet,
-            moduleGlobals.authorizationPath,
-            data.messages,
-            data.fee,
-            data.chainId,
-            data.memo,
-            Number(data.accountNumber),
-            Number(data.sequence),
+            data.authorizationPath,
+            tx.messages,
+            tx.fee,
+            tx.chainId,
+            tx.memo,
+            Number(tx.accountNumber),
+            Number(tx.sequence),
           );
         } else {
           return {
             target: "Root",
             type: ErrorActions.Forwarded,
-            data: Error(
-              `the ${SignerActions.SignTx} action only accepts a tx as a parameter`,
-            ),
+            data: Error(`invalid parameter for ${SignerActions.SignTx}`),
           };
         }
       } catch (error) {
