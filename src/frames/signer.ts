@@ -1,4 +1,3 @@
-import { StdSignature } from "@cosmjs/launchpad";
 import { FRAME_CREATED_AND_LOADED } from "frames/constants";
 import { onGetAddress } from "frames/signer/handlers/onGetAddress";
 import { onInitialize } from "frames/signer/handlers/onInitialize";
@@ -7,9 +6,9 @@ import { Wallet } from "frames/signer/wallet";
 import { ErrorActions } from "types/errorActions";
 import { Message } from "types/message";
 import { RootActions } from "types/rootActions";
+import { Signable, SignResponse } from "types/signable";
 import { SignerActions } from "types/signerActions";
-import { Tx } from "types/tx";
-import { isTxSignRequest } from "types/txSignRequest";
+import { isTxSignRequest } from "types/signRequest";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
 
@@ -19,10 +18,10 @@ const moduleGlobals: { wallet: Wallet; authorizationPath: string | null } = {
 };
 
 const handleMessage = async (
-  message: Message<SignerActions, Tx | string>,
+  message: Message<SignerActions, Signable | string>,
 ): Promise<Message<
   RootActions | ErrorActions,
-  Error | StdSignature | string | undefined
+  Error | SignResponse | string | undefined
 > | null> => {
   const { data } = message;
   switch (message.type) {
@@ -41,17 +40,7 @@ const handleMessage = async (
     case SignerActions.SignTx:
       try {
         if (isTxSignRequest(data)) {
-          const tx: Tx = data.transaction;
-          return onSignTx(
-            moduleGlobals.wallet,
-            data.authorizationPath,
-            tx.messages,
-            tx.fee,
-            tx.chainId,
-            tx.memo,
-            Number(tx.accountNumber),
-            Number(tx.sequence),
-          );
+          return onSignTx(moduleGlobals.wallet, data);
         } else {
           return {
             target: "Root",
@@ -75,7 +64,7 @@ const handleMessage = async (
 };
 
 const onMessage = async (
-  message: Message<SignerActions, string | Tx>,
+  message: Message<SignerActions, string | Signable>,
 ): Promise<void> => {
   if (message.target !== "Signer") {
     console.warn(
@@ -85,7 +74,7 @@ const onMessage = async (
   } else {
     const response: Message<
       RootActions | ErrorActions,
-      Error | StdSignature | string | undefined
+      Error | SignResponse | string | undefined
     > | null = await handleMessage(message);
     if (response !== null) {
       sendMessage(parent, {
@@ -106,7 +95,7 @@ window.addEventListener("load", (): void => {
   // Attach the event listener
   window.addEventListener(
     "message",
-    createMessageCallback<SignerActions, string | Tx>(onMessage),
+    createMessageCallback<SignerActions, string | Signable>(onMessage),
   );
   // Send the very first message to the parent window
   sendMessage(parent, {

@@ -1,4 +1,3 @@
-import { Msg, StdFee, StdSignature } from "@cosmjs/launchpad";
 import {
   CUSTODIAN_AUTH_COMPLETED_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
@@ -16,9 +15,9 @@ import { FrameDataListener } from "types/frameDataListener";
 import { GenericMessage } from "types/genericMessage";
 import { isErrorMessage, Message } from "types/message";
 import { RootActions } from "types/rootActions";
+import { Signable, SignResponse } from "types/signable";
 import { SignerActions } from "types/signerActions";
-import { Tx } from "types/tx";
-import { TxSignRequest } from "types/txSignRequest";
+import { SignRequest } from "types/signRequest";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 import { isError } from "utils/isError";
@@ -63,9 +62,8 @@ export class Signer {
   private resolvers: { [id: string]: PromiseResolver } = {};
   private stateChangeListener?: StateChangeHandler;
   private setAuthButtonReady: () => void = (): void => {};
-  private setAuthButtonNotInitialized: (
-    error: Error | string,
-  ) => void = (): void => {};
+  private setAuthButtonNotInitialized: (error: Error | string) => void =
+    (): void => {};
 
   constructor(config: SignerConfiguration) {
     this.configuration = config;
@@ -255,7 +253,7 @@ export class Signer {
   private sendMessageAndPromiseToRespond = <
     T,
     A extends ActionType,
-    D = undefined
+    D = undefined,
   >(
     message: Message<A, D>,
     timeout = 4000,
@@ -425,42 +423,23 @@ export class Signer {
   };
 
   /**
-   * Sign given set of messages
+   * Sign a signable object
    *
-   * @param messages The messages that the caller wants to sign
-   * @param fee The fee of the transaction
-   * @param chainId The chain id
-   * @param memo The memo string (can be omitted)
-   * @param accountNumber The account number (FIXME: it should be possible to compute this actually)
-   * @param sequence The sequence number (FIXME: it should be also possible to compute this too)
+   * @param signable The signable object which can be a amino StdSignDoc or a stargate SignDoc
    */
-  public sign = (
-    messages: Msg[],
-    fee: StdFee,
-    chainId: string,
-    memo: string,
-    accountNumber: string,
-    sequence: string,
-  ): Promise<StdSignature> => {
+  public sign = (signable: Signable): Promise<SignResponse> => {
     const { authorization } = this.configuration;
-    const tx: Tx = {
-      messages: messages,
-      fee: fee,
-      chainId: chainId,
-      memo: memo,
-      accountNumber: accountNumber,
-      sequence: sequence,
-    };
+
     return this.sendMessageAndPromiseToRespond<
-      StdSignature,
+      SignResponse,
       SignerActions,
-      TxSignRequest
+      SignRequest
     >(
       {
         target: "Signer",
         type: SignerActions.SignTx,
         data: {
-          transaction: tx,
+          signable: signable,
           authorizationPath: authorization.path,
         },
       },

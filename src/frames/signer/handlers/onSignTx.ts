@@ -1,17 +1,12 @@
-import {
-  Coin,
-  isMsgSend,
-  Msg,
-  MsgSend,
-  StdFee,
-  StdSignature,
-} from "@cosmjs/launchpad";
+import { Coin, isMsgSend, Msg, MsgSend, StdFee } from "@cosmjs/launchpad";
 import { Wallet } from "frames/signer/wallet";
 import { Modal } from "modal";
 import { ErrorActions } from "types/errorActions";
 import { Message } from "types/message";
 import { ModalEvents } from "types/modalEvents";
 import { RootActions } from "types/rootActions";
+import { SignResponse } from "types/signable";
+import { SignRequest } from "types/signRequest";
 
 const ONE_MILLION = 1000000.0;
 
@@ -20,8 +15,6 @@ const Formatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 6,
   useGrouping: true,
 });
-
-const rejectedError = new Error("rejected");
 
 const getFeeValue = (fee: StdFee): number => {
   if (fee.amount === undefined) return 0 /* Should probably throw */;
@@ -112,9 +105,8 @@ const isAuthorized = (
   const modal = new Modal();
   return new Promise((resolve: (value: boolean) => void): void => {
     modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
-      const items: NodeListOf<Element> = document.querySelectorAll(
-        "[data-key]",
-      );
+      const items: NodeListOf<Element> =
+        document.querySelectorAll("[data-key]");
       items.forEach((item: Element): void => {
         const childNode: Node | null = item.firstElementChild;
         switch (item.getAttribute("data-key")) {
@@ -181,28 +173,15 @@ const isAuthorized = (
 
 export const onSignTx = async (
   wallet: Wallet,
-  authorizationPath: string | null,
-  messages: ReadonlyArray<Msg>,
-  fee: StdFee,
-  chainId: string,
-  memo = "",
-  accountNumber: number,
-  sequenceNumber: number,
+  request: SignRequest,
 ): Promise<
-  Message<RootActions, StdSignature> | Message<ErrorActions, Error>
+  Message<RootActions, SignResponse> | Message<ErrorActions, Error>
 > => {
   const sign = async (): Promise<
-    Message<RootActions, StdSignature> | Message<ErrorActions, Error>
+    Message<RootActions, SignResponse> | Message<ErrorActions, Error>
   > => {
     try {
-      const signature: StdSignature = await wallet.sign(
-        messages,
-        fee,
-        chainId,
-        memo,
-        accountNumber,
-        sequenceNumber,
-      );
+      const signature = await wallet.sign(request.signable);
       return {
         target: "Root",
         type: RootActions.SendSignature,
@@ -216,27 +195,9 @@ export const onSignTx = async (
       };
     }
   };
-  if (messages.some(isMsgSend)) {
-    if (
-      await isAuthorized(
-        authorizationPath,
-        messages,
-        fee,
-        chainId,
-        memo,
-        accountNumber,
-        sequenceNumber,
-      )
-    ) {
-      return sign();
-    } else {
-      return {
-        target: "Root",
-        type: ErrorActions.Forwarded,
-        data: rejectedError,
-      };
-    }
-  } else {
-    return sign();
-  }
+  // FIXME: For the moment it is not possible to easily check whether the
+  //        transactions is a send or not. So we skip this check.
+  //        Otherwise we should check and then call `isAuthorized()` and
+  //        confirm that the user does authorize the transaction.
+  return sign();
 };
