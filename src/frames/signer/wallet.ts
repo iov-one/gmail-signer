@@ -1,3 +1,4 @@
+import { toBase64 } from "@cosmjs/encoding";
 import {
   AccountData,
   AminoSignResponse,
@@ -8,6 +9,7 @@ import {
   DirectSignResponse,
 } from "@cosmjs/proto-signing";
 import { parseHDPath } from "frames/signer/helpers/parseHDPath";
+import Long from "long";
 import { isSignDoc, isStdSignDoc, Signable } from "types/signable";
 
 export class Wallet {
@@ -45,6 +47,20 @@ export class Wallet {
     return accounts[0].address;
   }
 
+  public async getPublicKey(): Promise<string | undefined> {
+    const { aminoSigner } = this;
+    if (aminoSigner === null) {
+      return undefined;
+    }
+    const accounts: ReadonlyArray<AccountData> =
+      await aminoSigner.getAccounts();
+    // Why would there be more than 1 account?
+    if (accounts.length === 0) {
+      return undefined;
+    }
+    return toBase64(accounts[0].pubkey);
+  }
+
   public async sign(
     signable: Signable,
   ): Promise<DirectSignResponse | AminoSignResponse> {
@@ -57,7 +73,15 @@ export class Wallet {
       throw new Error("cannot get the address for this wallet");
     }
     if (isSignDoc(signable)) {
-      return directSigner.signDirect(address, signable);
+      const { accountNumber } = signable;
+      return directSigner.signDirect(address, {
+        ...signable,
+        accountNumber: new Long(
+          accountNumber.low,
+          accountNumber.high,
+          accountNumber.unsigned,
+        ),
+      });
     } else if (isStdSignDoc(signable)) {
       return aminoSigner.signAmino(address, signable);
     } else {

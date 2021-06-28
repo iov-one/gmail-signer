@@ -1,5 +1,8 @@
 import { FRAME_CREATED_AND_LOADED } from "frames/constants";
-import { onGetAddress } from "frames/signer/handlers/onGetAddress";
+import {
+  onGetAddress,
+  onGetPublicKey,
+} from "frames/signer/handlers/onGetAddress";
 import { onInitialize } from "frames/signer/handlers/onInitialize";
 import { onSignTx } from "frames/signer/handlers/onSignTx";
 import { Wallet } from "frames/signer/wallet";
@@ -57,6 +60,8 @@ const handleMessage = async (
       }
     case SignerActions.GetAddress:
       return onGetAddress(moduleGlobals.wallet);
+    case SignerActions.GetPublicKey:
+      return onGetPublicKey(moduleGlobals.wallet);
     default:
       console.warn(`unknown message: ${message.type as string}`);
       return null;

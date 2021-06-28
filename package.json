@@ -56,6 +56,7 @@
   },
   "dependencies": {
     "@cosmjs/amino": "^0.25.5",
+    "@cosmjs/encoding": "^0.25.5",
     "@cosmjs/proto-signing": "^0.25.5"
   }
 }

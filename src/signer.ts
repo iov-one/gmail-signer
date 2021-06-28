@@ -139,6 +139,7 @@ export class Signer {
           break;
         case RootActions.SendSignature:
         case RootActions.SendAddress:
+        case RootActions.SendPublicKey:
         case RootActions.SendIsMnemonicSafelyStored:
         case RootActions.SendShowMnemonicResult:
           this.forwardMessageToPromiseResolver(message);
@@ -446,6 +447,13 @@ export class Signer {
       -1 /* We need to wait forever */,
     );
   };
+
+  public async getPublicKey(): Promise<string> {
+    return this.sendMessageAndPromiseToRespond<string, SignerActions>({
+      target: "Signer",
+      type: SignerActions.GetPublicKey,
+    });
+  }
 
   /**
    * Return whether the user has confirmed saving the mnemonic phrase in a safe

@@ -93,6 +93,7 @@ const toTransaction = (
   };
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const isAuthorized = (
   authorizationPath: string | null,
   messages: ReadonlyArray<Msg>,
