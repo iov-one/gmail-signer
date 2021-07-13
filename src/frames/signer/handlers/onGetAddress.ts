@@ -21,3 +21,22 @@ export const onGetAddress = async (
     };
   }
 };
+
+export const onGetPublicKey = async (
+  wallet: Wallet,
+): Promise<Message<RootActions | ErrorActions, string>> => {
+  const pubKey: string | undefined = await wallet.getPublicKey();
+  if (pubKey === undefined) {
+    return {
+      target: "Root",
+      type: ErrorActions.WalletNotInitialized,
+      data: "Wallet not initialized",
+    };
+  } else {
+    return {
+      target: "Root",
+      type: RootActions.SendPublicKey,
+      data: pubKey,
+    };
+  }
+};

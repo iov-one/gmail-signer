@@ -1,5 +1,6 @@
 export enum RootActions {
   SendAddress = "SEND_ADDRESS",
+  SendPublicKey = "SEND_PUBLIC_KEY",
   SendSignature = "SEND_SIGNATURE",
   SignerReady = "SIGNER_READY",
   AccountDeleted = "ACCOUNT_DELETED",
