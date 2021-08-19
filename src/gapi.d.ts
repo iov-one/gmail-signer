@@ -34,9 +34,11 @@ declare namespace gapi {
   export interface User extends Observable<User> {
     getBasicProfile(): BasicProfile;
     getAuthResponse(includeAuthorizationData: boolean): GoogleApiAuthResponse;
+    getGrantedScopes(): string;
     getId(): string;
     get(): User;
     isSignedIn(): boolean;
+    hasGrantedScopes(scopes: string): boolean;
   }
 
   export interface gapi {
