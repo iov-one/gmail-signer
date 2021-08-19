@@ -41,6 +41,8 @@ export enum SignerState {
   CancelledByUser,
   BlockedByBrowser,
   BrowserProbablyBlockingContent,
+  PermissionRequestCancelled,
+  PermissionRequestRejected,
 }
 
 export interface SignerConfiguration {
@@ -328,19 +330,24 @@ export class Signer {
         } else if (typeof message.data === "string") {
           if (message.data === "popup_closed_by_user") {
             this.setState(SignerState.CancelledByUser);
+          } else if (message.data === "access_denied") {
+            this.setState(SignerState.PermissionRequestCancelled);
           } else if (message.data === "popup_blocked_by_browser") {
             this.setState(SignerState.BlockedByBrowser);
           } else if (message.data === "user_logged_out") {
             // Interesting: means that the user didn't actually login
             this.setState(SignerState.BrowserProbablyBlockingContent);
+          } else if (message.data === "required_scopes_missing") {
+            this.setState(SignerState.PermissionRequestRejected);
           } else {
             this.setState(SignerState.Failed);
           }
           this.setAuthButtonNotInitialized(message.data);
         } else {
           console.error(message);
+          this.setState(SignerState.Failed);
         }
-        return true;
+        return false;
       case undefined:
         break;
       default:

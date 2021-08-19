@@ -5,7 +5,6 @@ import {
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
   FRAME_CREATED_AND_LOADED,
-  FRAME_SEND_SPECIFIC_DATA,
 } from "frames/constants";
 import { GDriveApi } from "frames/custodian/gDriveApi";
 import { onAbandon } from "frames/custodian/handlers/onAbandon";
@@ -48,6 +47,7 @@ import { sendMessage } from "utils/sendMessage";
 import Auth = gapi.Auth;
 
 const gapi = window.gapi;
+const DRIVE_APP_DATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 
 const moduleGlobals: { accessToken: GoogleAccessToken | null } = {
   accessToken: null,
@@ -162,6 +162,14 @@ const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
       const user: gapi.User = currentUser.isSignedIn()
         ? currentUser
         : await auth2.signIn();
+      // user doesnt has the required drive.appdata scope
+      if (!user.hasGrantedScopes(DRIVE_APP_DATA_SCOPE)) {
+        auth2.disconnect();
+        return sendAuthMessage(
+          CUSTODIAN_AUTH_FAILED_EVENT,
+          "required_scopes_missing",
+        );
+      }
       // Create the wallet (ask the signer to do so actually)
       const authInfo: GoogleAuthInfo = transformGooglesResponse(user);
       // Make the access token "global"
@@ -230,9 +238,9 @@ const setupGoogleApi = async (
           gapi.auth2
             .init({
               client_id: clientID,
-              scope: "https://www.googleapis.com/auth/drive.appdata",
+              scope: DRIVE_APP_DATA_SCOPE,
               cookiepolicy: "single_host_origin",
-              fetch_basic_profile: true,
+              fetch_basic_profile: false,
               prompt: "select_account",
             })
             .then((auth2: gapi.Auth): void => {
