@@ -1,20 +1,22 @@
-import { toBase64 } from "@cosmjs/encoding";
 import {
   AccountData,
   AminoSignResponse,
   Secp256k1HdWallet,
-} from "@cosmjs/launchpad";
+} from "@cosmjs/amino";
+import { stringToPath } from "@cosmjs/crypto";
+import { toBase64 } from "@cosmjs/encoding";
 import {
   DirectSecp256k1HdWallet,
+  DirectSecp256k1HdWalletOptions,
   DirectSignResponse,
 } from "@cosmjs/proto-signing";
-import { parseHDPath } from "frames/signer/helpers/parseHDPath";
 import Long from "long";
 import { isSignDoc, isStdSignDoc, Signable } from "types/signable";
 
 export class Wallet {
   private directSigner: DirectSecp256k1HdWallet | null = null;
   private aminoSigner: Secp256k1HdWallet | null = null;
+  private mnemonic: string | null = null;
 
   public async initialize(
     mnemonic: string,
@@ -25,12 +27,13 @@ export class Wallet {
     // stargate and launchpad for the time being.
     this.aminoSigner = await Secp256k1HdWallet.fromMnemonic(mnemonic, {
       prefix: prefix,
-      hdPaths: [parseHDPath(hdPath)],
+      hdPaths: [stringToPath(hdPath)],
     });
     this.directSigner = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, {
       prefix: prefix,
-      hdPaths: [parseHDPath(hdPath)],
+      hdPaths: [stringToPath(hdPath)],
     });
+    this.mnemonic = mnemonic;
   }
 
   public async getAddress(): Promise<string | undefined> {
@@ -65,8 +68,9 @@ export class Wallet {
     signable: Signable,
   ): Promise<DirectSignResponse | AminoSignResponse> {
     const { directSigner, aminoSigner } = this;
-    if (directSigner === null || aminoSigner === null)
+    if (directSigner === null || aminoSigner === null) {
       throw new Error("signer not initialized");
+    }
     // Sign it!!!
     const address: string | undefined = await this.getAddress();
     if (address === undefined) {
@@ -87,5 +91,20 @@ export class Wallet {
     } else {
       throw new Error("'signable' must be a SignDoc or StdSignDoc");
     }
+  }
+
+  public async getExtraAccounts(
+    options: Partial<DirectSecp256k1HdWalletOptions>,
+  ): Promise<ReadonlyArray<AccountData>> {
+    const { mnemonic } = this;
+    if (mnemonic === null) {
+      throw new Error("signer not initialized");
+    }
+    const wallet = await DirectSecp256k1HdWallet.fromMnemonic(
+      mnemonic,
+      options,
+    );
+
+    return wallet.getAccounts();
   }
 }

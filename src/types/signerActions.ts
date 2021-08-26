@@ -3,4 +3,5 @@ export enum SignerActions {
   SignTx,
   GetAddress,
   GetPublicKey,
+  GetAddressGroup,
 }
