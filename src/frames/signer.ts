@@ -1,3 +1,7 @@
+import {
+  AccountData,
+  DirectSecp256k1HdWalletOptions,
+} from "@cosmjs/proto-signing";
 import { FRAME_CREATED_AND_LOADED } from "frames/constants";
 import {
   onGetAddress,
@@ -12,8 +16,11 @@ import { RootActions } from "types/rootActions";
 import { Signable, SignResponse } from "types/signable";
 import { SignerActions } from "types/signerActions";
 import { isTxSignRequest } from "types/signRequest";
+import { SimplifiedDirectSecp256k1HdWalletOptions } from "types/simplifiedDirectSecp256k1HdWalletOptions";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
+
+import { onGetAddressGroup } from "./signer/handlers/onGetAddressGroup";
 
 const moduleGlobals: { wallet: Wallet; authorizationPath: string | null } = {
   wallet: new Wallet(),
@@ -21,10 +28,17 @@ const moduleGlobals: { wallet: Wallet; authorizationPath: string | null } = {
 };
 
 const handleMessage = async (
-  message: Message<SignerActions, Signable | string>,
+  message: Message<
+    SignerActions,
+    Signable | { [key: string]: DirectSecp256k1HdWalletOptions } | string
+  >,
 ): Promise<Message<
   RootActions | ErrorActions,
-  Error | SignResponse | string | undefined
+  | Error
+  | SignResponse
+  | { [key: string]: ReadonlyArray<AccountData> }
+  | string
+  | undefined
 > | null> => {
   const { data } = message;
   switch (message.type) {
@@ -58,6 +72,8 @@ const handleMessage = async (
           data: error as Error,
         };
       }
+    case SignerActions.GetAddressGroup:
+      return onGetAddressGroup(moduleGlobals.wallet, data);
     case SignerActions.GetAddress:
       return onGetAddress(moduleGlobals.wallet);
     case SignerActions.GetPublicKey:
@@ -79,7 +95,11 @@ const onMessage = async (
   } else {
     const response: Message<
       RootActions | ErrorActions,
-      Error | SignResponse | string | undefined
+      | Error
+      | SignResponse
+      | { [key: string]: ReadonlyArray<AccountData> }
+      | string
+      | undefined
     > | null = await handleMessage(message);
     if (response !== null) {
       sendMessage(parent, {

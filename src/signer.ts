@@ -1,3 +1,4 @@
+import { AccountData } from "@cosmjs/proto-signing";
 import {
   CUSTODIAN_AUTH_COMPLETED_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
@@ -18,6 +19,7 @@ import { RootActions } from "types/rootActions";
 import { Signable, SignResponse } from "types/signable";
 import { SignerActions } from "types/signerActions";
 import { SignRequest } from "types/signRequest";
+import { SimplifiedDirectSecp256k1HdWalletOptions } from "types/simplifiedDirectSecp256k1HdWalletOptions";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
 import { isError } from "utils/isError";
@@ -492,6 +494,28 @@ export class Signer {
       target: "Custodian",
       type: CustodianActions.ShowMnemonic,
       data: path,
+    });
+  }
+
+  /**
+   * Returns a map with user defined identifiers each for a set of accounts.
+   *
+   * The resulting map matches the input map, for each input options a one
+   * accounts address and public key is computed for every path in the options.
+   *
+   * @param options A map of options to be used in the derivation of the key pair
+   */
+  public getExtraAccounts(options: {
+    [key: string]: SimplifiedDirectSecp256k1HdWalletOptions;
+  }): Promise<{ [key: string]: ReadonlyArray<AccountData> }> {
+    return this.sendMessageAndPromiseToRespond<
+      { [key: string]: ReadonlyArray<AccountData> },
+      SignerActions,
+      { [key: string]: SimplifiedDirectSecp256k1HdWalletOptions }
+    >({
+      target: "Signer",
+      type: SignerActions.GetAddressGroup,
+      data: options,
     });
   }
 }
