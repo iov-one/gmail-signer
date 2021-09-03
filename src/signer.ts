@@ -490,11 +490,14 @@ export class Signer {
       boolean,
       CustodianActions,
       string
-    >({
-      target: "Custodian",
-      type: CustodianActions.ShowMnemonic,
-      data: path,
-    });
+    >(
+      {
+        target: "Custodian",
+        type: CustodianActions.ShowMnemonic,
+        data: path,
+      },
+      -1,
+    );
   }
 
   /**

@@ -12,9 +12,8 @@ export const showMnemonic = async (
   return new Promise(
     (resolve: (value: boolean) => void, reject: (error: Error) => void) => {
       modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
-        const items: NodeListOf<Element> = document.querySelectorAll(
-          "[data-key]",
-        );
+        const items: NodeListOf<Element> =
+          document.querySelectorAll("[data-key]");
         const words = mnemonic.split(/\s+/);
         items.forEach((item: Element): void => {
           const key: string | null = item.getAttribute("data-key");

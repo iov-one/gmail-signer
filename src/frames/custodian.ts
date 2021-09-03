@@ -154,7 +154,11 @@ interface GoogleFrameMessage {
   };
 }
 
-const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
+const setupAuthButton = (
+  auth2: gapi.Auth,
+  mnemonicLength: 12 | 24,
+  signer: Window,
+): void => {
   const signIn = async (): Promise<void> => {
     sendAuthMessage(CUSTODIAN_AUTH_STARTED_EVENT);
     const currentUser: gapi.User = getCurrentUser(auth2);
@@ -176,6 +180,7 @@ const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
       moduleGlobals.accessToken = authInfo.accessToken;
       // Create the wallet
       const mnemonic: string = await readOrCreateMnemonic(
+        mnemonicLength,
         moduleGlobals.accessToken,
       );
       // Now initialize the signer
@@ -229,6 +234,7 @@ const setupAuthButton = (auth2: gapi.Auth, signer: Window): void => {
 
 const setupGoogleApi = async (
   frame: HTMLIFrameElement,
+  mnemonicLength: 12 | 24,
   clientID: string,
 ): Promise<void> => {
   return new Promise(
@@ -245,7 +251,7 @@ const setupGoogleApi = async (
             })
             .then((auth2: gapi.Auth): void => {
               if (frame.contentWindow !== null) {
-                setupAuthButton(auth2, frame.contentWindow);
+                setupAuthButton(auth2, mnemonicLength, frame.contentWindow);
               } else {
                 reject(new Error("could not create the signer iframe"));
               }
@@ -264,10 +270,11 @@ const setupGoogleApi = async (
 };
 
 const createSignerAndInstallMessagesHandler = async (): Promise<void> => {
-  const { googleClientID } = await getFrameSpecificData<SignerConfiguration>();
+  const { googleClientID, mnemonicLength } =
+    await getFrameSpecificData<SignerConfiguration>();
   const frame: HTMLIFrameElement = await sandboxFrame(signer, "signer");
   // Setup the google api stuff
-  await setupGoogleApi(frame, googleClientID);
+  await setupGoogleApi(frame, mnemonicLength, googleClientID);
   // Attach the event listener for message exchange
   window.addEventListener("message", createMessageCallback(onMessage));
   // Finally announce initialization
