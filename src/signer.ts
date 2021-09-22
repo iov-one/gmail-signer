@@ -1,4 +1,7 @@
 import { AccountData } from "@cosmjs/proto-signing";
+import custodian from "templates/custodian.html";
+import * as uuid from "uuid";
+
 import {
   CUSTODIAN_AUTH_COMPLETED_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
@@ -6,26 +9,24 @@ import {
   CUSTODIAN_AUTH_STARTED_EVENT,
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
-} from "frames/constants";
-import custodian from "templates/custodian.html";
-import { ActionType } from "types/actionType";
-import { CommonError } from "types/commonError";
-import { CustodianActions } from "types/custodianActions";
-import { ErrorActions } from "types/errorActions";
-import { FrameDataListener } from "types/frameDataListener";
-import { GenericMessage } from "types/genericMessage";
-import { isErrorMessage, Message } from "types/message";
-import { RootActions } from "types/rootActions";
-import { Signable, SignResponse } from "types/signable";
-import { SignerActions } from "types/signerActions";
-import { SignRequest } from "types/signRequest";
-import { SimplifiedDirectSecp256k1HdWalletOptions } from "types/simplifiedDirectSecp256k1HdWalletOptions";
-import { createMessageCallback } from "utils/createMessageCallback";
-import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
-import { isError } from "utils/isError";
-import { sandboxFrame } from "utils/sandboxFrame";
-import { sendMessage } from "utils/sendMessage";
-import * as uuid from "uuid";
+} from "./frames/constants";
+import { ActionType } from "./types/actionType";
+import { CommonError } from "./types/commonError";
+import { CustodianActions } from "./types/custodianActions";
+import { ErrorActions } from "./types/errorActions";
+import { FrameDataListener } from "./types/frameDataListener";
+import { GenericMessage } from "./types/genericMessage";
+import { isErrorMessage, Message } from "./types/message";
+import { RootActions } from "./types/rootActions";
+import { Signable, SignResponse } from "./types/signable";
+import { SignerActions } from "./types/signerActions";
+import { SignRequest } from "./types/signRequest";
+import { SimplifiedDirectSecp256k1HdWalletOptions } from "./types/simplifiedDirectSecp256k1HdWalletOptions";
+import { createMessageCallback } from "./utils/createMessageCallback";
+import { createTemporaryMessageListener } from "./utils/createTemporaryMessageListener";
+import { isError } from "./utils/isError";
+import { sandboxFrame } from "./utils/sandboxFrame";
+import { sendMessage } from "./utils/sendMessage";
 
 type StateChangeHandler = <T>(state: SignerState, data: T) => void;
 

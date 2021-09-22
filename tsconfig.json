@@ -12,16 +12,7 @@
     "esModuleInterop": true,
     "sourceMap": true,
     "declaration": true,
-    "outDir": "lib",
-    "baseUrl": "src",
-    "paths": {
-      "frames/*": ["./frames/*"],
-      "types/*": ["./types/*"],
-      "templates/*": ["./templates/*"],
-      "utils/*": ["./utils/*"],
-      "signer": ["./signer"],
-      "window": ["./window"]
-    }
+    "outDir": "lib"
   },
   "include": [
     "./src/**/*"

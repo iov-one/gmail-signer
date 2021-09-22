@@ -1,4 +1,4 @@
-import { VoidCallback } from "types/voidCallback";
+import { VoidCallback } from "../types/voidCallback";
 
 const isTrustedSource = (event: MessageEvent): boolean => {
   if (event.source === parent) return true;

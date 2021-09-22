@@ -3,7 +3,7 @@
 import {
   FRAME_GET_SPECIFIC_DATA,
   FRAME_SEND_SPECIFIC_DATA,
-} from "frames/constants";
+} from "../frames/constants";
 
 export class FrameDataListener<T> extends Function {
   private readonly data: T;

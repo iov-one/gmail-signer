@@ -1,4 +1,4 @@
-export interface GoogleApiAuthResponse {
+declare interface GoogleApiAuthResponse {
   readonly access_token: string;
   readonly expires_at: string;
   readonly id_token: string;
@@ -6,7 +6,7 @@ export interface GoogleApiAuthResponse {
   readonly scope: string;
 }
 
-export interface AttachClickHandlerOptions {}
+declare interface AttachClickHandlerOptions {}
 
 declare namespace gapi {
   type LoadOptionsCallback = () => void;
@@ -16,14 +16,14 @@ declare namespace gapi {
   }
   type LoadOptions = LoadOptionsCallback | LoadOptionsOption;
 
-  export interface BasicProfile {
+  interface BasicProfile {
     getGivenName(): string;
     getFamilyName(): string;
     getEmail(): string;
     getImageUrl(): string;
   }
 
-  export interface Error {
+  interface Error {
     readonly error: string;
   }
 
@@ -31,7 +31,7 @@ declare namespace gapi {
     readonly listen: (callback: (value: T) => void) => void;
   }
 
-  export interface User extends Observable<User> {
+  interface User extends Observable<User> {
     getBasicProfile(): BasicProfile;
     getAuthResponse(includeAuthorizationData: boolean): GoogleApiAuthResponse;
     getGrantedScopes(): string;
@@ -41,12 +41,12 @@ declare namespace gapi {
     hasGrantedScopes(scopes: string): boolean;
   }
 
-  export interface gapi {
+  interface gapi {
     readonly load: (mod: string, options: LoadOptions) => void;
     readonly auth2: Auth;
   }
 
-  export interface InitConfig {
+  interface InitConfig {
     readonly client_id: string;
     readonly scope?: string;
     readonly cookiepolicy?: "single_host_origin" | "none";
@@ -56,7 +56,7 @@ declare namespace gapi {
     readonly ux_mode?: "popup" | "redirect";
   }
 
-  export interface Auth {
+  interface Auth {
     readonly currentUser: User;
     readonly isSignedIn: Observable<boolean>;
     disconnect(): void;

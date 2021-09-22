@@ -1,10 +1,10 @@
-import { ActionType } from "types/actionType";
+import { ActionType } from "../types/actionType";
 import {
   isCustodianMessage,
   isRootMessage,
   isSignerMessage,
   Message,
-} from "types/message";
+} from "../types/message";
 
 export const sendMessage = <A extends ActionType, T = undefined>(
   recipient: Window,

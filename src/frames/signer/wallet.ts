@@ -11,7 +11,8 @@ import {
   DirectSignResponse,
 } from "@cosmjs/proto-signing";
 import Long from "long";
-import { isSignDoc, isStdSignDoc, Signable } from "types/signable";
+
+import { isSignDoc, isStdSignDoc, Signable } from "../../types/signable";
 
 export class Wallet {
   private directSigner: DirectSecp256k1HdWallet | null = null;

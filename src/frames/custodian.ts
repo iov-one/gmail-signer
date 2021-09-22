@@ -1,3 +1,27 @@
+import { SignerConfiguration } from "../signer";
+import signer from "../templates/signer.html";
+import { ActionType } from "../types/actionType";
+import { CustodianActions } from "../types/custodianActions";
+import { ErrorActions } from "../types/errorActions";
+import { GenericMessage } from "../types/genericMessage";
+import {
+  GoogleAccessToken,
+  isGoogleAccessToken,
+} from "../types/googleAccessToken";
+import { GoogleAuthInfo } from "../types/googleAuthInfo";
+import { isGoogleAuthError } from "../types/googleOAuthError";
+import {
+  isCustodianMessage,
+  isRootMessage,
+  isSignerMessage,
+  Message,
+} from "../types/message";
+import { RootActions } from "../types/rootActions";
+import { SignerActions } from "../types/signerActions";
+import { createMessageCallback } from "../utils/createMessageCallback";
+import { createTemporaryMessageListener } from "../utils/createTemporaryMessageListener";
+import { sandboxFrame } from "../utils/sandboxFrame";
+import { sendMessage } from "../utils/sendMessage";
 import {
   CUSTODIAN_AUTH_COMPLETED_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
@@ -5,46 +29,21 @@ import {
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
   FRAME_CREATED_AND_LOADED,
-} from "frames/constants";
-import { GDriveApi } from "frames/custodian/gDriveApi";
-import { onAbandon } from "frames/custodian/handlers/onAbandon";
-import { onDeleteAccount } from "frames/custodian/handlers/onDeleteAccount";
-import { onSignOut } from "frames/custodian/handlers/onSignOut";
-import { getCurrentUser } from "frames/custodian/helpers/getCurrentUser";
-import { onRootMessage } from "frames/custodian/helpers/onRootMessage";
-import { onSignerMessage } from "frames/custodian/helpers/onSignerMessage";
-import { readOrCreateMnemonic } from "frames/custodian/helpers/readOrCreateMnemonic";
-import { sendAuthMessage } from "frames/custodian/helpers/sendAuthMessage";
-import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
-import { transformGooglesResponse } from "frames/custodian/helpers/transformGooglesResponse";
-import { getFrameSpecificData } from "frames/helpers/getFrameSpecificData";
-import { gapi } from "gapi";
-import { SignerConfiguration } from "signer";
-import signer from "templates/signer.html";
-import { ActionType } from "types/actionType";
-import { CustodianActions } from "types/custodianActions";
-import { ErrorActions } from "types/errorActions";
-import { GenericMessage } from "types/genericMessage";
-import {
-  GoogleAccessToken,
-  isGoogleAccessToken,
-} from "types/googleAccessToken";
-import { GoogleAuthInfo } from "types/googleAuthInfo";
-import { isGoogleAuthError } from "types/googleOAuthError";
-import {
-  isCustodianMessage,
-  isRootMessage,
-  isSignerMessage,
-  Message,
-} from "types/message";
-import { RootActions } from "types/rootActions";
-import { SignerActions } from "types/signerActions";
-import { createMessageCallback } from "utils/createMessageCallback";
-import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
-import { sandboxFrame } from "utils/sandboxFrame";
-import { sendMessage } from "utils/sendMessage";
+} from "./constants";
+import { onAbandon } from "./custodian/handlers/onAbandon";
+import { onDeleteAccount } from "./custodian/handlers/onDeleteAccount";
+import { onSignOut } from "./custodian/handlers/onSignOut";
+import { getCurrentUser } from "./custodian/helpers/getCurrentUser";
+import { onRootMessage } from "./custodian/helpers/onRootMessage";
+import { onSignerMessage } from "./custodian/helpers/onSignerMessage";
+import { readOrCreateMnemonic } from "./custodian/helpers/readOrCreateMnemonic";
+import { sendAuthMessage } from "./custodian/helpers/sendAuthMessage";
+import { showMnemonic } from "./custodian/helpers/showMnemonic";
+import { transformGooglesResponse } from "./custodian/helpers/transformGooglesResponse";
+import { getFrameSpecificData } from "./helpers/getFrameSpecificData";
 
 import Auth = gapi.Auth;
+import { GDriveApi } from "./custodian/gDriveApi";
 
 const gapi = window.gapi;
 const DRIVE_APP_DATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata";

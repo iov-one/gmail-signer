@@ -1,5 +1,3 @@
-import { gapi } from "gapi";
-
 export interface GoogleOAuthError {
   readonly reason: string;
 }

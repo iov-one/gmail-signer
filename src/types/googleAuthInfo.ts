@@ -1,8 +1,8 @@
 import {
   GoogleAccessToken,
   isGoogleAccessToken,
-} from "types/googleAccessToken";
-import { GoogleUser, isGoogleUser } from "types/googleUser";
+} from "../types/googleAccessToken";
+import { GoogleUser, isGoogleUser } from "../types/googleUser";
 
 export interface GoogleAuthInfo {
   readonly accessToken: GoogleAccessToken;
