@@ -47,7 +47,10 @@ import { sendMessage } from "utils/sendMessage";
 import Auth = gapi.Auth;
 
 const gapi = window.gapi;
-const DRIVE_APP_DATA_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+const REQUIRED_SCOPES = [
+  "https://www.googleapis.com/auth/drive.appdata",
+  "email",
+];
 
 const moduleGlobals: { accessToken: GoogleAccessToken | null } = {
   accessToken: null,
@@ -167,7 +170,7 @@ const setupAuthButton = (
         ? currentUser
         : await auth2.signIn();
       // user doesnt has the required drive.appdata scope
-      if (!user.hasGrantedScopes(DRIVE_APP_DATA_SCOPE)) {
+      if (!user.hasGrantedScopes(REQUIRED_SCOPES.join(" "))) {
         auth2.disconnect();
         return sendAuthMessage(
           CUSTODIAN_AUTH_FAILED_EVENT,
@@ -244,7 +247,7 @@ const setupGoogleApi = async (
           gapi.auth2
             .init({
               client_id: clientID,
-              scope: DRIVE_APP_DATA_SCOPE,
+              scope: REQUIRED_SCOPES.join(" "),
               cookiepolicy: "single_host_origin",
               fetch_basic_profile: false,
               prompt: "select_account",
