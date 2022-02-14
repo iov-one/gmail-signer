@@ -11,9 +11,13 @@ export const showMnemonic = async (
   const mnemonic = await GDriveApi.readMnemonic(accessToken);
   return new Promise(
     (resolve: (value: boolean) => void, reject: (error: Error) => void) => {
-      modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
+      modal.on(ModalEvents.Loaded, (document: Document): void => {
         const items: NodeListOf<Element> =
           document.querySelectorAll("[data-key]");
+        if (items.length === 0) {
+          reject(new Error("can't get required buttons from window"));
+          modal.close();
+        }
         const words = mnemonic.split(/\s+/);
         items.forEach((item: Element): void => {
           const key: string | null = item.getAttribute("data-key");

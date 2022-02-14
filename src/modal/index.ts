@@ -65,14 +65,16 @@ export class Modal {
       reject.onclick = (): void => this.reject();
     });
     // In case the caller wants to do something, let's allow them
-    this.invokeHandler(ModalEvents.Loaded, document);
     // Wait until the popup is fully "loaded" with
     // the new items created in it!
+    // FIXME: find a way to check if react page is done loading
+    // and includes butto elements in it
     popup.setTimeout((): void => {
+      this.invokeHandler(ModalEvents.Loaded, document);
       // FIXME: we should put this back at some point
       // Now resize it as to fit it's contents
       // resizeToFit(popup);
-    }, 0);
+    }, 1500);
   };
 
   public open(path: string, name = "", width = 1, height = 1): void {
@@ -99,7 +101,7 @@ export class Modal {
     }
     this.popup = popup;
     // For the load event, we want to setup a few things
-    popup.addEventListener("load", this.onLoad);
+    this.popup.addEventListener("load", this.onLoad);
     // Watch the window to catch if the user closes it. It runs on both,
     // user clicking the x of the window and closing it and programmatically
     // calling .close()

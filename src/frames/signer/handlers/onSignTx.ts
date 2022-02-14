@@ -105,7 +105,7 @@ const isAuthorized = (
 ): Promise<boolean> => {
   const modal = new Modal();
   return new Promise((resolve: (value: boolean) => void): void => {
-    modal.on(ModalEvents.Loaded, (document: HTMLDocument): void => {
+    modal.on(ModalEvents.Loaded, (document: Document): void => {
       const items: NodeListOf<Element> =
         document.querySelectorAll("[data-key]");
       items.forEach((item: Element): void => {
