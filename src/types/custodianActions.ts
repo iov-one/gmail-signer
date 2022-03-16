@@ -4,4 +4,5 @@ export enum CustodianActions {
   DeleteAccount,
   SignOut,
   Abandon,
+  Validate2fa,
 }

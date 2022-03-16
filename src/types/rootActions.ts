@@ -6,6 +6,7 @@ export enum RootActions {
   AccountDeleted = "ACCOUNT_DELETED",
   SendShowMnemonicResult = "SHOW_MNEMONIC_RESULT",
   SendIsMnemonicSafelyStored = "SEND_IS_MNEMONIC_SAFELY_STORED",
+  Send2FAResult = "SEND_2FA_RESULT",
   SignedOut = "SIGNED_OUT",
   Sandboxed = "SANDBOXED",
   ForwardedError = "FORWARDED_ERROR",
