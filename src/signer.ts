@@ -163,7 +163,8 @@ export class Signer {
         case RootActions.SendPublicKey:
         case RootActions.SendIsMnemonicSafelyStored:
         case RootActions.SendShowMnemonicResult:
-        case RootActions.Send2FAResult:
+        case RootActions.Send2faAuthResult:
+        case RootActions.Send2faResult:
           this.forwardMessageToPromiseResolver(message);
           break;
         default:
@@ -502,6 +503,17 @@ export class Signer {
       type: CustodianActions.GetIsMnemonicSafelyStored,
       data: undefined,
     });
+  }
+
+  public async authenticate2faUser(data: string): Promise<void> {
+    return this.sendMessageAndPromiseToRespond(
+      {
+        target: "Custodian",
+        type: CustodianActions.AuthenticateWith2fa,
+        data,
+      },
+      -1,
+    );
   }
 
   public async validate2faUser(data: string): Promise<boolean> {

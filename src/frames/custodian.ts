@@ -93,6 +93,18 @@ const handleMessage = async (
         type: RootActions.SendShowMnemonicResult,
         data: await showMnemonic(moduleGlobals.accessToken, message.data),
       };
+    case CustodianActions.AuthenticateWith2fa:
+      if (!isGoogleAccessToken(moduleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      if (typeof message.data !== "string")
+        throw new Error(
+          "invalid request, for us to validate 2fa please provide a token string",
+        );
+      await authenticate2FAUser(message.data);
+      return {
+        target: "Root",
+        type: RootActions.Send2faAuthResult,
+      };
     case CustodianActions.Validate2fa:
       if (!isGoogleAccessToken(moduleGlobals.accessToken))
         throw new Error("user did not authenticate yet");
@@ -102,7 +114,7 @@ const handleMessage = async (
         );
       return {
         target: "Root",
-        type: RootActions.Send2FAResult,
+        type: RootActions.Send2faResult,
         data: await validate2FAUser(message.data),
       };
     case CustodianActions.GetIsMnemonicSafelyStored:
@@ -202,7 +214,6 @@ const validate2FAUser = async (data: string): Promise<boolean> => {
   try {
     const { twoFactorAuthConfig } = moduleGlobals;
     if (!twoFactorAuthConfig) {
-      sendAuthMessage(CUSTODIAN_AUTH_2FA_CONFIG_FAILURE);
       throw new Error("Can't find twoFactorAuthConfig object");
     }
 
@@ -214,15 +225,20 @@ const validate2FAUser = async (data: string): Promise<boolean> => {
       },
     });
     const { validated }: { validated: boolean } = await response.json();
-    // if anyone is listening to this event
-    window.dispatchEvent(
-      new CustomEvent("2faUserAuthenticated", { detail: validated }),
-    );
     return validated;
   } catch (error) {
     console.error(error);
+    sendAuthMessage(CUSTODIAN_AUTH_2FA_CONFIG_FAILURE);
   }
   return false;
+};
+
+const authenticate2FAUser = async (data: string): Promise<void> => {
+  const result = await validate2FAUser(data);
+  // if anyone is listening to this event
+  window.dispatchEvent(
+    new CustomEvent("2faUserAuthenticated", { detail: result }),
+  );
 };
 
 const check2FAUser = async (idToken: string): Promise<boolean> => {
@@ -254,7 +270,7 @@ const authenticateWith2FA = async (): Promise<boolean> => {
       "2faUserAuthenticated",
       (e) => {
         const event = e as CustomEvent<boolean>;
-        if (event.detail) {
+        if (event.detail !== undefined && event.detail) {
           resolve(true);
         } else resolve(false);
       },
