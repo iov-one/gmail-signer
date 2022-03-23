@@ -9,7 +9,7 @@ export const onInitialize = async (
 ): Promise<Message<RootActions | ErrorActions, string | Error | undefined>> => {
   // Now we can initialize the wallet
   try {
-    // FIXME: parametrize path and prefix
+    // TODO: parametrize path and prefix
     await wallet.initialize(mnemonic, "m/44'/234'/0'/0/0", "star");
     return {
       target: "Root",

@@ -1,5 +1,9 @@
 import { AccountData } from "@cosmjs/proto-signing";
 import {
+  CUSTODIAN_AUTH_2FA_COMPLETED_EVENT,
+  CUSTODIAN_AUTH_2FA_CONFIG_FAILURE,
+  CUSTODIAN_AUTH_2FA_FAILED_EVENT,
+  CUSTODIAN_AUTH_2FA_STARTED_EVENT,
   CUSTODIAN_AUTH_COMPLETED_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
   CUSTODIAN_AUTH_READY_EVENT,
@@ -45,6 +49,18 @@ export enum SignerState {
   BrowserProbablyBlockingContent,
   PermissionRequestCancelled,
   PermissionRequestRejected,
+  Verifying2fa,
+  Verified2fa,
+  Verification2faFailed,
+  Verification2faConfigFailure,
+}
+
+export interface TwoFactorAuthConfig {
+  check: string;
+  register: string;
+  verify: string;
+  validate: string;
+  remove: string;
 }
 
 export interface SignerConfiguration {
@@ -53,6 +69,7 @@ export interface SignerConfiguration {
   };
   readonly googleClientID: string;
   readonly mnemonicLength: 12 | 24;
+  readonly twoFactorAuthUrls?: TwoFactorAuthConfig;
 }
 
 interface PromiseResolver {
@@ -146,6 +163,8 @@ export class Signer {
         case RootActions.SendPublicKey:
         case RootActions.SendIsMnemonicSafelyStored:
         case RootActions.SendShowMnemonicResult:
+        case RootActions.Send2faAuthResult:
+        case RootActions.Send2faResult:
           this.forwardMessageToPromiseResolver(message);
           break;
         default:
@@ -315,14 +334,26 @@ export class Signer {
         break;
       case CUSTODIAN_AUTH_COMPLETED_EVENT:
         this.setState(SignerState.AuthenticationCompleted);
-        break;
+        return true;
       case CUSTODIAN_AUTH_READY_EVENT:
         // Resolve the pending promise if it's there
         this.setAuthButtonReady();
         break;
       case CUSTODIAN_AUTH_SUCCEEDED_EVENT:
         this.setState(SignerState.Authenticated, message.data);
-        return true;
+        break;
+      case CUSTODIAN_AUTH_2FA_STARTED_EVENT:
+        this.setState(SignerState.Verifying2fa);
+        break;
+      case CUSTODIAN_AUTH_2FA_COMPLETED_EVENT:
+        this.setState(SignerState.Verified2fa);
+        break;
+      case CUSTODIAN_AUTH_2FA_FAILED_EVENT:
+        this.setState(SignerState.Verification2faFailed);
+        break;
+      case CUSTODIAN_AUTH_2FA_CONFIG_FAILURE:
+        this.setState(SignerState.Verification2faConfigFailure);
+        return false;
       case CUSTODIAN_AUTH_FAILED_EVENT:
         if (isErrorMessage(message)) {
           this.setState(SignerState.Failed);
@@ -352,8 +383,6 @@ export class Signer {
         return false;
       case undefined:
         break;
-      default:
-        this.setState(SignerState.Failed);
     }
     return false;
   };
@@ -474,6 +503,28 @@ export class Signer {
       type: CustodianActions.GetIsMnemonicSafelyStored,
       data: undefined,
     });
+  }
+
+  public async authenticate2faUser(data: string): Promise<void> {
+    return this.sendMessageAndPromiseToRespond(
+      {
+        target: "Custodian",
+        type: CustodianActions.AuthenticateWith2fa,
+        data,
+      },
+      -1,
+    );
+  }
+
+  public async validate2faUser(data: string): Promise<boolean> {
+    return this.sendMessageAndPromiseToRespond(
+      {
+        target: "Custodian",
+        type: CustodianActions.Validate2fa,
+        data,
+      },
+      -1,
+    );
   }
 
   /**

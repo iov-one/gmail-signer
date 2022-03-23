@@ -1,4 +1,10 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
+  CUSTODIAN_AUTH_2FA_COMPLETED_EVENT,
+  CUSTODIAN_AUTH_2FA_CONFIG_FAILURE,
+  CUSTODIAN_AUTH_2FA_FAILED_EVENT,
+  CUSTODIAN_AUTH_2FA_STARTED_EVENT,
   CUSTODIAN_AUTH_COMPLETED_EVENT,
   CUSTODIAN_AUTH_FAILED_EVENT,
   CUSTODIAN_AUTH_STARTED_EVENT,
@@ -19,7 +25,7 @@ import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
 import { transformGooglesResponse } from "frames/custodian/helpers/transformGooglesResponse";
 import { getFrameSpecificData } from "frames/helpers/getFrameSpecificData";
 import { gapi } from "gapi";
-import { SignerConfiguration } from "signer";
+import { SignerConfiguration, TwoFactorAuthConfig } from "signer";
 import signer from "templates/signer.html";
 import { ActionType } from "types/actionType";
 import { CustodianActions } from "types/custodianActions";
@@ -52,8 +58,14 @@ const REQUIRED_SCOPES = [
   "email",
 ];
 
-const moduleGlobals: { accessToken: GoogleAccessToken | null } = {
+const moduleGlobals: {
+  accessToken: GoogleAccessToken | null;
+  mnemonicLength: 12 | 24 | null;
+  twoFactorAuthConfig: TwoFactorAuthConfig | null;
+} = {
   accessToken: null,
+  mnemonicLength: null,
+  twoFactorAuthConfig: null,
 };
 
 const signOutFromGoogle = async (): Promise<void> => {
@@ -80,6 +92,30 @@ const handleMessage = async (
         target: "Root",
         type: RootActions.SendShowMnemonicResult,
         data: await showMnemonic(moduleGlobals.accessToken, message.data),
+      };
+    case CustodianActions.AuthenticateWith2fa:
+      if (!isGoogleAccessToken(moduleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      if (typeof message.data !== "string")
+        throw new Error(
+          "invalid request, for us to validate 2fa please provide a token string",
+        );
+      await authenticate2FAUser(message.data);
+      return {
+        target: "Root",
+        type: RootActions.Send2faAuthResult,
+      };
+    case CustodianActions.Validate2fa:
+      if (!isGoogleAccessToken(moduleGlobals.accessToken))
+        throw new Error("user did not authenticate yet");
+      if (typeof message.data !== "string")
+        throw new Error(
+          "invalid request, for us to validate 2fa please provide a token string",
+        );
+      return {
+        target: "Root",
+        type: RootActions.Send2faResult,
+        data: await validate2FAUser(message.data),
       };
     case CustodianActions.GetIsMnemonicSafelyStored:
       if (!isGoogleAccessToken(moduleGlobals.accessToken))
@@ -157,10 +193,97 @@ interface GoogleFrameMessage {
   };
 }
 
+const createWalletInitializeSigner = async (signer: Window): Promise<void> => {
+  if (!moduleGlobals.accessToken || !moduleGlobals.mnemonicLength) return;
+  const mnemonic: string = await readOrCreateMnemonic(
+    moduleGlobals.mnemonicLength,
+    moduleGlobals.accessToken,
+  );
+  signer.postMessage(
+    {
+      target: "Signer",
+      type: SignerActions.Initialize,
+      data: mnemonic,
+    },
+    location.origin,
+  );
+  sendAuthMessage(CUSTODIAN_AUTH_COMPLETED_EVENT);
+};
+
+const validate2FAUser = async (data: string): Promise<boolean> => {
+  try {
+    const { twoFactorAuthConfig } = moduleGlobals;
+    if (!twoFactorAuthConfig) {
+      throw new Error("Can't find twoFactorAuthConfig object");
+    }
+
+    const response = await fetch(twoFactorAuthConfig.validate, {
+      method: "POST",
+      body: data,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const { validated }: { validated: boolean } = await response.json();
+    return validated;
+  } catch (error) {
+    console.error(error);
+    sendAuthMessage(CUSTODIAN_AUTH_2FA_CONFIG_FAILURE);
+  }
+  return false;
+};
+
+const authenticate2FAUser = async (data: string): Promise<void> => {
+  const result = await validate2FAUser(data);
+  // if anyone is listening to this event
+  window.dispatchEvent(
+    new CustomEvent("2faUserAuthenticated", { detail: result }),
+  );
+};
+
+const check2FAUser = async (idToken: string): Promise<boolean> => {
+  try {
+    const { twoFactorAuthConfig } = moduleGlobals;
+    if (!twoFactorAuthConfig) {
+      sendAuthMessage(CUSTODIAN_AUTH_2FA_CONFIG_FAILURE);
+      throw new Error("Can't find twoFactorAuthConfig object");
+    }
+
+    const response = await fetch(twoFactorAuthConfig.check, {
+      method: "POST",
+      body: JSON.stringify({ idToken }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const { result }: { result: boolean } = await response.json();
+    return result;
+  } catch (error) {
+    console.error(error);
+  }
+  return false;
+};
+
+const authenticateWith2FA = async (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    window.addEventListener(
+      "2faUserAuthenticated",
+      (e) => {
+        const event = e as CustomEvent<boolean>;
+        if (event.detail !== undefined && event.detail) {
+          resolve(true);
+        } else resolve(false);
+      },
+      { once: true },
+    );
+  });
+};
+
 const setupAuthButton = (
   auth2: gapi.Auth,
   mnemonicLength: 12 | 24,
   signer: Window,
+  twoFactorAuthConfig?: TwoFactorAuthConfig,
 ): void => {
   const signIn = async (): Promise<void> => {
     sendAuthMessage(CUSTODIAN_AUTH_STARTED_EVENT);
@@ -172,6 +295,7 @@ const setupAuthButton = (
       // user doesnt has the required drive.appdata scope
       if (!user.hasGrantedScopes(REQUIRED_SCOPES.join(" "))) {
         auth2.disconnect();
+
         return sendAuthMessage(
           CUSTODIAN_AUTH_FAILED_EVENT,
           "required_scopes_missing",
@@ -179,32 +303,37 @@ const setupAuthButton = (
       }
       // Create the wallet (ask the signer to do so actually)
       const authInfo: GoogleAuthInfo = transformGooglesResponse(user);
-      // Make the access token "global"
-      moduleGlobals.accessToken = authInfo.accessToken;
-      // Create the wallet
-      const mnemonic: string = await readOrCreateMnemonic(
-        mnemonicLength,
-        moduleGlobals.accessToken,
-      );
-      // Now initialize the signer
-      signer.postMessage(
-        {
-          target: "Signer",
-          type: SignerActions.Initialize,
-          data: mnemonic,
-        },
-        location.origin,
-      );
       // Now let the signer know
       sendAuthMessage(CUSTODIAN_AUTH_SUCCEEDED_EVENT, authInfo);
+      // Setup module globals
+      moduleGlobals.accessToken = authInfo.accessToken;
+      moduleGlobals.mnemonicLength = mnemonicLength;
+      // only if twoFactorConfig was provided
+      if (twoFactorAuthConfig) {
+        moduleGlobals.twoFactorAuthConfig = twoFactorAuthConfig;
+        // check 2FA here
+        const is2fauser = await check2FAUser(authInfo.accessToken.idToken);
+        if (is2fauser) {
+          sendAuthMessage(CUSTODIAN_AUTH_2FA_STARTED_EVENT);
+          const authenticated = await authenticateWith2FA();
+          while (!authenticated) {
+            sendAuthMessage(CUSTODIAN_AUTH_2FA_FAILED_EVENT);
+            const res = await authenticateWith2FA();
+            if (res) {
+              break;
+            }
+          }
+          sendAuthMessage(CUSTODIAN_AUTH_2FA_COMPLETED_EVENT);
+        }
+      }
+      // Create the wallet
+      await createWalletInitializeSigner(signer);
     } catch (error) {
       if (isGoogleAuthError(error)) {
         sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error.error);
       } else {
         sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error);
       }
-    } finally {
-      sendAuthMessage(CUSTODIAN_AUTH_COMPLETED_EVENT);
     }
   };
   // Listen for sign-in requests, and do so "forever"
@@ -239,6 +368,7 @@ const setupGoogleApi = async (
   frame: HTMLIFrameElement,
   mnemonicLength: 12 | 24,
   clientID: string,
+  twoFactorAuthConfig?: TwoFactorAuthConfig,
 ): Promise<void> => {
   return new Promise(
     (resolve: () => void, reject: (error: Error | string) => void): void => {
@@ -254,7 +384,12 @@ const setupGoogleApi = async (
             })
             .then((auth2: gapi.Auth): void => {
               if (frame.contentWindow !== null) {
-                setupAuthButton(auth2, mnemonicLength, frame.contentWindow);
+                setupAuthButton(
+                  auth2,
+                  mnemonicLength,
+                  frame.contentWindow,
+                  twoFactorAuthConfig,
+                );
               } else {
                 reject(new Error("could not create the signer iframe"));
               }
@@ -273,11 +408,16 @@ const setupGoogleApi = async (
 };
 
 const createSignerAndInstallMessagesHandler = async (): Promise<void> => {
-  const { googleClientID, mnemonicLength } =
+  const { googleClientID, mnemonicLength, twoFactorAuthUrls } =
     await getFrameSpecificData<SignerConfiguration>();
   const frame: HTMLIFrameElement = await sandboxFrame(signer, "signer");
   // Setup the google api stuff
-  await setupGoogleApi(frame, mnemonicLength, googleClientID);
+  await setupGoogleApi(
+    frame,
+    mnemonicLength,
+    googleClientID,
+    twoFactorAuthUrls,
+  );
   // Attach the event listener for message exchange
   window.addEventListener("message", createMessageCallback(onMessage));
   // Finally announce initialization

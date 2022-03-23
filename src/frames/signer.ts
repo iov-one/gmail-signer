@@ -16,7 +16,6 @@ import { RootActions } from "types/rootActions";
 import { Signable, SignResponse } from "types/signable";
 import { SignerActions } from "types/signerActions";
 import { isTxSignRequest } from "types/signRequest";
-import { SimplifiedDirectSecp256k1HdWalletOptions } from "types/simplifiedDirectSecp256k1HdWalletOptions";
 import { createMessageCallback } from "utils/createMessageCallback";
 import { sendMessage } from "utils/sendMessage";
 
