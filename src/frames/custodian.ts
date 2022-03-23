@@ -308,22 +308,23 @@ const setupAuthButton = (
       // Setup module globals
       moduleGlobals.accessToken = authInfo.accessToken;
       moduleGlobals.mnemonicLength = mnemonicLength;
+      // only if twoFactorConfig was provided
       if (twoFactorAuthConfig) {
         moduleGlobals.twoFactorAuthConfig = twoFactorAuthConfig;
-      }
-      // check 2FA here
-      const is2fauser = await check2FAUser(authInfo.accessToken.idToken);
-      if (is2fauser) {
-        sendAuthMessage(CUSTODIAN_AUTH_2FA_STARTED_EVENT);
-        const authenticated = await authenticateWith2FA();
-        while (!authenticated) {
-          sendAuthMessage(CUSTODIAN_AUTH_2FA_FAILED_EVENT);
-          const res = await authenticateWith2FA();
-          if (res) {
-            break;
+        // check 2FA here
+        const is2fauser = await check2FAUser(authInfo.accessToken.idToken);
+        if (is2fauser) {
+          sendAuthMessage(CUSTODIAN_AUTH_2FA_STARTED_EVENT);
+          const authenticated = await authenticateWith2FA();
+          while (!authenticated) {
+            sendAuthMessage(CUSTODIAN_AUTH_2FA_FAILED_EVENT);
+            const res = await authenticateWith2FA();
+            if (res) {
+              break;
+            }
           }
+          sendAuthMessage(CUSTODIAN_AUTH_2FA_COMPLETED_EVENT);
         }
-        sendAuthMessage(CUSTODIAN_AUTH_2FA_COMPLETED_EVENT);
       }
       // Create the wallet
       await createWalletInitializeSigner(signer);
