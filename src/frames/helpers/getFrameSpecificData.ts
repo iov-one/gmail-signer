@@ -1,9 +1,9 @@
+import { GenericMessage } from "../../types/genericMessage";
+import { createTemporaryMessageListener } from "../../utils/createTemporaryMessageListener";
 import {
   FRAME_GET_SPECIFIC_DATA,
   FRAME_SEND_SPECIFIC_DATA,
-} from "frames/constants";
-import { GenericMessage } from "types/genericMessage";
-import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
+} from "../constants";
 
 export const getFrameSpecificData = async <T>(): Promise<T> => {
   // FIXME: should reject if we don't get the message in a certain time?

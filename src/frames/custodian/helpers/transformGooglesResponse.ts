@@ -1,5 +1,5 @@
-import { gapi } from "gapi";
-import { GoogleAuthInfo } from "types/googleAuthInfo";
+import { gapi } from "../../../gapi";
+import { GoogleAuthInfo } from "../../../types/googleAuthInfo";
 
 export const transformGooglesResponse = (user: gapi.User): GoogleAuthInfo => {
   const auth = user.getAuthResponse(true);

@@ -1,6 +1,6 @@
-import { GDriveApi } from "frames/custodian/gDriveApi";
-import { createMnemonic } from "frames/signer/helpers/createMnemonic";
-import { GoogleAccessToken } from "types/googleAccessToken";
+import { GoogleAccessToken } from "../../../types/googleAccessToken";
+import { createMnemonic } from "../../signer/helpers/createMnemonic";
+import { GDriveApi } from "../gDriveApi";
 
 export const readOrCreateMnemonic = async (
   mnemonicLength: 12 | 24,

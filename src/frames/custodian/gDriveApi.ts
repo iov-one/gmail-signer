@@ -1,12 +1,13 @@
 import { entropyToMnemonic, mnemonicToEntropy } from "bip39";
-import { CommonError } from "types/commonError";
+
+import { CommonError } from "../../types/commonError";
 import {
   FilesData,
   isFileId,
   isMnemonicData,
   isMnemonicSavedData,
-} from "types/filesData";
-import { GoogleAccessToken } from "types/googleAccessToken";
+} from "../../types/filesData";
+import { GoogleAccessToken } from "../../types/googleAccessToken";
 
 const InvalidServerResponse: Error = new Error("invalid response from server");
 

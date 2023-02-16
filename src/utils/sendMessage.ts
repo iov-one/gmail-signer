@@ -1,16 +1,16 @@
-import { ActionType } from "types/actionType";
+import { ActionType } from "../types/actionType";
 import {
   isCustodianMessage,
   isRootMessage,
   isSignerMessage,
   Message,
-} from "types/message";
+} from "../types/message";
 
 export const sendMessage = <A extends ActionType, T = undefined>(
   recipient: Window,
   message: Message<A, T>,
   origin = location.origin,
-) => {
+): void => {
   if (recipient === null) {
     console.warn("attempting to send a message to a null window");
   }

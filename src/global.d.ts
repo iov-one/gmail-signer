@@ -1,4 +1,4 @@
-import { gapi } from "gapi";
+import { gapi } from "./gapi";
 
 declare global {
   interface Window {

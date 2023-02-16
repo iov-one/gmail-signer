@@ -1,7 +1,7 @@
-import { GDriveApi } from "frames/custodian/gDriveApi";
-import { GoogleAccessToken } from "types/googleAccessToken";
-import { Message } from "types/message";
-import { RootActions } from "types/rootActions";
+import { GoogleAccessToken } from "../../../types/googleAccessToken";
+import { Message } from "../../../types/message";
+import { RootActions } from "../../../types/rootActions";
+import { GDriveApi } from "../gDriveApi";
 
 export const onDeleteAccount = async (
   accessToken: GoogleAccessToken,

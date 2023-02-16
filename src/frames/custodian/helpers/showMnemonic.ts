@@ -1,7 +1,7 @@
-import { GDriveApi } from "frames/custodian/gDriveApi";
-import { Modal } from "modal";
-import { GoogleAccessToken } from "types/googleAccessToken";
-import { ModalEvents } from "types/modalEvents";
+import { Modal } from "../../../modal";
+import { GoogleAccessToken } from "../../../types/googleAccessToken";
+import { ModalEvents } from "../../../types/modalEvents";
+import { GDriveApi } from "../gDriveApi";
 
 export const showMnemonic = async (
   accessToken: GoogleAccessToken,

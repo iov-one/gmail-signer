@@ -1,8 +1,8 @@
-import { ActionType } from "types/actionType";
-import { CustodianActions } from "types/custodianActions";
-import { ErrorActions } from "types/errorActions";
-import { RootActions } from "types/rootActions";
-import { SignerActions } from "types/signerActions";
+import { ActionType } from "../types/actionType";
+import { CustodianActions } from "../types/custodianActions";
+import { ErrorActions } from "../types/errorActions";
+import { RootActions } from "../types/rootActions";
+import { SignerActions } from "../types/signerActions";
 
 export type TargetType = "Custodian" | "Signer" | "Root";
 export interface Message<A extends ActionType, T = undefined> {
