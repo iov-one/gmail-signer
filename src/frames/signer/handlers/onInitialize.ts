@@ -1,7 +1,7 @@
-import { Wallet } from "frames/signer/wallet";
-import { ErrorActions } from "types/errorActions";
-import { Message } from "types/message";
-import { RootActions } from "types/rootActions";
+import { Wallet } from "../../../frames/signer/wallet";
+import { ErrorActions } from "../../../types/errorActions";
+import { Message } from "../../../types/message";
+import { RootActions } from "../../../types/rootActions";
 
 export const onInitialize = async (
   wallet: Wallet,

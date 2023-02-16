@@ -1,4 +1,4 @@
-import { propertyExistsAndHasType } from "utils/propertyExistsAndHasType";
+import { propertyExistsAndHasType } from "../utils/propertyExistsAndHasType";
 
 export interface GoogleUser {
   readonly id: string;

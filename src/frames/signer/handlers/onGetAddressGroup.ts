@@ -1,11 +1,12 @@
 import { AccountData } from "@cosmjs/amino";
 import { stringToPath } from "@cosmjs/crypto";
 import { DirectSecp256k1HdWalletOptions } from "@cosmjs/proto-signing";
-import { Wallet } from "frames/signer/wallet";
-import { ErrorActions } from "types/errorActions";
-import { Message } from "types/message";
-import { RootActions } from "types/rootActions";
-import { SimplifiedDirectSecp256k1HdWalletOptions } from "types/simplifiedDirectSecp256k1HdWalletOptions";
+
+import { ErrorActions } from "../../../types/errorActions";
+import { Message } from "../../../types/message";
+import { RootActions } from "../../../types/rootActions";
+import { SimplifiedDirectSecp256k1HdWalletOptions } from "../../../types/simplifiedDirectSecp256k1HdWalletOptions";
+import { Wallet } from "../wallet";
 
 const convertToDirectSecp256keHdWalletOptions = (
   originalOptions: SimplifiedDirectSecp256k1HdWalletOptions,

@@ -1,5 +1,5 @@
-import { ActionType } from "types/actionType";
-import { isMessage, Message } from "types/message";
+import { ActionType } from "../types/actionType";
+import { isMessage, Message } from "../types/message";
 
 export const createMessageCallback = <T extends ActionType, R = undefined>(
   handleMessage: (message: Message<T, R>) => void | Promise<void>,

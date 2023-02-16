@@ -1,4 +1,4 @@
-import { isSignable, Signable } from "types/signable";
+import { isSignable, Signable } from "../types/signable";
 
 export interface SignRequest {
   readonly signable: Signable;

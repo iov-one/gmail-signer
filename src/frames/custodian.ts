@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+import signer from "templates/signer.html";
+
 import {
   CUSTODIAN_AUTH_2FA_COMPLETED_EVENT,
   CUSTODIAN_AUTH_2FA_CONFIG_FAILURE,
@@ -11,44 +13,43 @@ import {
   CUSTODIAN_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
   FRAME_CREATED_AND_LOADED,
-} from "frames/constants";
-import { GDriveApi } from "frames/custodian/gDriveApi";
-import { onAbandon } from "frames/custodian/handlers/onAbandon";
-import { onDeleteAccount } from "frames/custodian/handlers/onDeleteAccount";
-import { onSignOut } from "frames/custodian/handlers/onSignOut";
-import { getCurrentUser } from "frames/custodian/helpers/getCurrentUser";
-import { onRootMessage } from "frames/custodian/helpers/onRootMessage";
-import { onSignerMessage } from "frames/custodian/helpers/onSignerMessage";
-import { readOrCreateMnemonic } from "frames/custodian/helpers/readOrCreateMnemonic";
-import { sendAuthMessage } from "frames/custodian/helpers/sendAuthMessage";
-import { showMnemonic } from "frames/custodian/helpers/showMnemonic";
-import { transformGooglesResponse } from "frames/custodian/helpers/transformGooglesResponse";
-import { getFrameSpecificData } from "frames/helpers/getFrameSpecificData";
-import { gapi } from "gapi";
-import { SignerConfiguration, TwoFactorAuthConfig } from "signer";
-import signer from "templates/signer.html";
-import { ActionType } from "types/actionType";
-import { CustodianActions } from "types/custodianActions";
-import { ErrorActions } from "types/errorActions";
-import { GenericMessage } from "types/genericMessage";
+} from "../frames/constants";
+import { GDriveApi } from "../frames/custodian/gDriveApi";
+import { onAbandon } from "../frames/custodian/handlers/onAbandon";
+import { onDeleteAccount } from "../frames/custodian/handlers/onDeleteAccount";
+import { onSignOut } from "../frames/custodian/handlers/onSignOut";
+import { getCurrentUser } from "../frames/custodian/helpers/getCurrentUser";
+import { onRootMessage } from "../frames/custodian/helpers/onRootMessage";
+import { onSignerMessage } from "../frames/custodian/helpers/onSignerMessage";
+import { readOrCreateMnemonic } from "../frames/custodian/helpers/readOrCreateMnemonic";
+import { sendAuthMessage } from "../frames/custodian/helpers/sendAuthMessage";
+import { showMnemonic } from "../frames/custodian/helpers/showMnemonic";
+import { transformGooglesResponse } from "../frames/custodian/helpers/transformGooglesResponse";
+import { getFrameSpecificData } from "../frames/helpers/getFrameSpecificData";
+import { gapi } from "../gapi";
+import { SignerConfiguration, TwoFactorAuthConfig } from "../signer";
+import { ActionType } from "../types/actionType";
+import { CustodianActions } from "../types/custodianActions";
+import { ErrorActions } from "../types/errorActions";
+import { GenericMessage } from "../types/genericMessage";
 import {
   GoogleAccessToken,
   isGoogleAccessToken,
-} from "types/googleAccessToken";
-import { GoogleAuthInfo } from "types/googleAuthInfo";
-import { isGoogleAuthError } from "types/googleOAuthError";
+} from "../types/googleAccessToken";
+import { GoogleAuthInfo } from "../types/googleAuthInfo";
+import { isGoogleAuthError } from "../types/googleOAuthError";
 import {
   isCustodianMessage,
   isRootMessage,
   isSignerMessage,
   Message,
-} from "types/message";
-import { RootActions } from "types/rootActions";
-import { SignerActions } from "types/signerActions";
-import { createMessageCallback } from "utils/createMessageCallback";
-import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
-import { sandboxFrame } from "utils/sandboxFrame";
-import { sendMessage } from "utils/sendMessage";
+} from "../types/message";
+import { RootActions } from "../types/rootActions";
+import { SignerActions } from "../types/signerActions";
+import { createMessageCallback } from "../utils/createMessageCallback";
+import { createTemporaryMessageListener } from "../utils/createTemporaryMessageListener";
+import { sandboxFrame } from "../utils/sandboxFrame";
+import { sendMessage } from "../utils/sendMessage";
 
 import Auth = gapi.Auth;
 
@@ -395,11 +396,11 @@ const setupGoogleApi = async (
               }
               resolve();
             })
-            .catch((error) => {
+            .catch((error: any) => {
               reject(error);
             });
         },
-        onerror: (error): void => {
+        onerror: (error: any): void => {
           reject(error);
         },
       });

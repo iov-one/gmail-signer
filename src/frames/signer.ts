@@ -2,23 +2,23 @@ import {
   AccountData,
   DirectSecp256k1HdWalletOptions,
 } from "@cosmjs/proto-signing";
-import { FRAME_CREATED_AND_LOADED } from "frames/constants";
+
+import { FRAME_CREATED_AND_LOADED } from "../frames/constants";
 import {
   onGetAddress,
   onGetPublicKey,
-} from "frames/signer/handlers/onGetAddress";
-import { onInitialize } from "frames/signer/handlers/onInitialize";
-import { onSignTx } from "frames/signer/handlers/onSignTx";
-import { Wallet } from "frames/signer/wallet";
-import { ErrorActions } from "types/errorActions";
-import { Message } from "types/message";
-import { RootActions } from "types/rootActions";
-import { Signable, SignResponse } from "types/signable";
-import { SignerActions } from "types/signerActions";
-import { isTxSignRequest } from "types/signRequest";
-import { createMessageCallback } from "utils/createMessageCallback";
-import { sendMessage } from "utils/sendMessage";
-
+} from "../frames/signer/handlers/onGetAddress";
+import { onInitialize } from "../frames/signer/handlers/onInitialize";
+import { onSignTx } from "../frames/signer/handlers/onSignTx";
+import { Wallet } from "../frames/signer/wallet";
+import { ErrorActions } from "../types/errorActions";
+import { Message } from "../types/message";
+import { RootActions } from "../types/rootActions";
+import { Signable, SignResponse } from "../types/signable";
+import { SignerActions } from "../types/signerActions";
+import { isTxSignRequest } from "../types/signRequest";
+import { createMessageCallback } from "../utils/createMessageCallback";
+import { sendMessage } from "../utils/sendMessage";
 import { onGetAddressGroup } from "./signer/handlers/onGetAddressGroup";
 
 const moduleGlobals: { wallet: Wallet; authorizationPath: string | null } = {

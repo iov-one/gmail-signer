@@ -1,6 +1,6 @@
-import { Message } from "types/message";
-import { SignerActions } from "types/signerActions";
-import { sendMessage } from "utils/sendMessage";
+import { Message } from "../../../types/message";
+import { SignerActions } from "../../../types/signerActions";
+import { sendMessage } from "../../../utils/sendMessage";
 
 export const onSignerMessage = (message: Message<SignerActions>): void => {
   if (frames.length === 0) {

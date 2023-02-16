@@ -1,12 +1,13 @@
 import { Coin, isMsgSend, Msg, MsgSend, StdFee } from "@cosmjs/launchpad";
-import { Wallet } from "frames/signer/wallet";
-import { Modal } from "modal";
-import { ErrorActions } from "types/errorActions";
-import { Message } from "types/message";
-import { ModalEvents } from "types/modalEvents";
-import { RootActions } from "types/rootActions";
-import { SignResponse } from "types/signable";
-import { SignRequest } from "types/signRequest";
+
+import { Wallet } from "../../../frames/signer/wallet";
+import { Modal } from "../../../modal";
+import { ErrorActions } from "../../../types/errorActions";
+import { Message } from "../../../types/message";
+import { ModalEvents } from "../../../types/modalEvents";
+import { RootActions } from "../../../types/rootActions";
+import { SignResponse } from "../../../types/signable";
+import { SignRequest } from "../../../types/signRequest";
 
 const ONE_MILLION = 1000000.0;
 

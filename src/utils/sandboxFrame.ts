@@ -1,5 +1,5 @@
-import { FRAME_CREATED_AND_LOADED } from "frames/constants";
-import { createTemporaryMessageListener } from "utils/createTemporaryMessageListener";
+import { FRAME_CREATED_AND_LOADED } from "../frames/constants";
+import { createTemporaryMessageListener } from "../utils/createTemporaryMessageListener";
 
 export const sandboxFrame = async (
   content: string,
