@@ -9,13 +9,13 @@ import { ErrorActions } from "././types/errorActions";
 import {
   CUSTODIAN_AUTH_2FA_COMPLETED_EVENT,
   CUSTODIAN_AUTH_2FA_CONFIG_FAILURE,
-  CUSTODIAN_AUTH_2FA_FAILED_EVENT,
+  CUSTODIAN_AUTH_2FA_FAILED_ATTEMPT_EVENT,
   CUSTODIAN_AUTH_2FA_STARTED_EVENT,
   CUSTODIAN_AUTH_COMPLETED_EVENT,
-  CUSTODIAN_AUTH_FAILED_EVENT,
   CUSTODIAN_AUTH_READY_EVENT,
   CUSTODIAN_AUTH_STARTED_EVENT,
-  CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+  CUSTODIAN_BASIC_AUTH_FAILED_EVENT,
+  CUSTODIAN_BASIC_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
 } from "./frames/constants";
 import { FrameDataListener } from "./types/frameDataListener";
@@ -24,6 +24,8 @@ import { isErrorMessage, Message } from "./types/message";
 import { RootActions } from "./types/rootActions";
 import { Signable, SignResponse } from "./types/signable";
 import { SignerActions } from "./types/signerActions";
+import { SignerConfiguration } from "./types/signerConfiguration";
+import { SignerState } from "./types/signerState";
 import { SignRequest } from "./types/signRequest";
 import { SimplifiedDirectSecp256k1HdWalletOptions } from "./types/simplifiedDirectSecp256k1HdWalletOptions";
 import { createMessageCallback } from "./utils/createMessageCallback";
@@ -33,45 +35,6 @@ import { sandboxFrame } from "./utils/sandboxFrame";
 import { sendMessage } from "./utils/sendMessage";
 
 type StateChangeHandler = <T>(state: SignerState, data: T) => void;
-
-export enum SignerState {
-  Loading,
-  ReadyToSignIn,
-  SignatureRequestRejected,
-  Sandboxed,
-  Authenticated,
-  SignedOut,
-  SignerReady,
-  Authenticating,
-  AuthenticationCompleted,
-  Failed,
-  CancelledByUser,
-  BlockedByBrowser,
-  BrowserProbablyBlockingContent,
-  PermissionRequestCancelled,
-  PermissionRequestRejected,
-  Verifying2fa,
-  Verified2fa,
-  Verification2faFailed,
-  Verification2faConfigFailure,
-}
-
-export interface TwoFactorAuthConfig {
-  check: string;
-  register: string;
-  verify: string;
-  validate: string;
-  remove: string;
-}
-
-export interface SignerConfiguration {
-  readonly authorization: {
-    readonly path: string;
-  };
-  readonly googleClientID: string;
-  readonly mnemonicLength: 12 | 24;
-  readonly twoFactorAuthUrls?: TwoFactorAuthConfig;
-}
 
 interface PromiseResolver {
   resolve: (...args: any[]) => void;
@@ -101,13 +64,10 @@ export class Signer {
       new FrameDataListener(this.configuration),
     );
     // Sandbox the iframe
-    try {
-      this.custodian = await sandboxFrame(custodian, "custodian", [
-        "allow-popups",
-      ]);
-    } finally {
-      cleanUp();
-    }
+    this.custodian = await sandboxFrame(custodian, "custodian", [
+      "allow-popups",
+    ]);
+    cleanUp();
   }
 
   /**
@@ -340,22 +300,22 @@ export class Signer {
         // Resolve the pending promise if it's there
         this.setAuthButtonReady();
         break;
-      case CUSTODIAN_AUTH_SUCCEEDED_EVENT:
-        this.setState(SignerState.Authenticated, message.data);
+      case CUSTODIAN_BASIC_AUTH_SUCCEEDED_EVENT:
+        this.setState(SignerState.BasicAuthenticationSucceeded, message.data);
         break;
       case CUSTODIAN_AUTH_2FA_STARTED_EVENT:
-        this.setState(SignerState.Verifying2fa);
+        this.setState(SignerState.Authentication2faStarted);
         break;
       case CUSTODIAN_AUTH_2FA_COMPLETED_EVENT:
-        this.setState(SignerState.Verified2fa);
+        this.setState(SignerState.Authentication2faVerified);
         break;
-      case CUSTODIAN_AUTH_2FA_FAILED_EVENT:
-        this.setState(SignerState.Verification2faFailed);
+      case CUSTODIAN_AUTH_2FA_FAILED_ATTEMPT_EVENT:
+        this.setState(SignerState.Authentication2faFailedAttempt);
         break;
       case CUSTODIAN_AUTH_2FA_CONFIG_FAILURE:
         this.setState(SignerState.Verification2faConfigFailure);
         return false;
-      case CUSTODIAN_AUTH_FAILED_EVENT:
+      case CUSTODIAN_BASIC_AUTH_FAILED_EVENT:
         if (isErrorMessage(message)) {
           this.setState(SignerState.Failed);
         } else if (isError(message.data)) {
@@ -365,14 +325,14 @@ export class Signer {
           if (message.data === "popup_closed_by_user") {
             this.setState(SignerState.CancelledByUser);
           } else if (message.data === "access_denied") {
-            this.setState(SignerState.PermissionRequestCancelled);
+            this.setState(SignerState.PermissionRequestRejected);
           } else if (message.data === "popup_blocked_by_browser") {
             this.setState(SignerState.BlockedByBrowser);
           } else if (message.data === "user_logged_out") {
             // Interesting: means that the user didn't actually login
             this.setState(SignerState.BrowserProbablyBlockingContent);
           } else if (message.data === "required_scopes_missing") {
-            this.setState(SignerState.PermissionRequestRejected);
+            this.setState(SignerState.PermissionNotProvided);
           } else {
             this.setState(SignerState.Failed);
           }
@@ -391,33 +351,27 @@ export class Signer {
   /**
    * This function initializes the whole flow that allows the user to authenticate with
    * Google and authorize the library to securely manage their mnemonic string
-   *
-   * @param button The button which when clicked would trigger a sign-in flow
    */
-  public connect(button: HTMLElement): () => void {
+  public connect(): () => void {
     this.setState(SignerState.Loading);
     // Setup the actual sign in flow trigger and the actual event
     // handler
     const targetWindow: Window = this.getCustodianWindow();
-    const requestSignIn = (): void => {
-      targetWindow.postMessage(
-        {
-          type: CUSTODIAN_SIGN_IN_REQUEST,
-        },
-        location.origin,
-      );
-    };
     // Start listening on the authentication events
     const cleanUp = createTemporaryMessageListener<GenericMessage>(
       this.onAuthEvent,
     );
-    button.addEventListener("click", requestSignIn);
     // Reset the state now
     this.setState(SignerState.ReadyToSignIn);
+    targetWindow.postMessage(
+      {
+        type: CUSTODIAN_SIGN_IN_REQUEST,
+      },
+      location.origin,
+    );
     // Return the cancellable thing now
     // Prepare the promise to be cancelled
     return (): void => {
-      button.removeEventListener("click", requestSignIn);
       cleanUp();
     };
   }

@@ -3,14 +3,15 @@
 import signer from "templates/signer.html";
 
 import {
+  CUSTODIAN_AUTH_2FA_AUTHENTICATED_CUSTOM_EVENT,
   CUSTODIAN_AUTH_2FA_COMPLETED_EVENT,
   CUSTODIAN_AUTH_2FA_CONFIG_FAILURE,
-  CUSTODIAN_AUTH_2FA_FAILED_EVENT,
+  CUSTODIAN_AUTH_2FA_FAILED_ATTEMPT_EVENT,
   CUSTODIAN_AUTH_2FA_STARTED_EVENT,
   CUSTODIAN_AUTH_COMPLETED_EVENT,
-  CUSTODIAN_AUTH_FAILED_EVENT,
   CUSTODIAN_AUTH_STARTED_EVENT,
-  CUSTODIAN_AUTH_SUCCEEDED_EVENT,
+  CUSTODIAN_BASIC_AUTH_FAILED_EVENT,
+  CUSTODIAN_BASIC_AUTH_SUCCEEDED_EVENT,
   CUSTODIAN_SIGN_IN_REQUEST,
   FRAME_CREATED_AND_LOADED,
 } from "../frames/constants";
@@ -27,7 +28,6 @@ import { showMnemonic } from "../frames/custodian/helpers/showMnemonic";
 import { transformGooglesResponse } from "../frames/custodian/helpers/transformGooglesResponse";
 import { getFrameSpecificData } from "../frames/helpers/getFrameSpecificData";
 import { gapi } from "../gapi";
-import { SignerConfiguration, TwoFactorAuthConfig } from "../signer";
 import { ActionType } from "../types/actionType";
 import { CustodianActions } from "../types/custodianActions";
 import { ErrorActions } from "../types/errorActions";
@@ -46,6 +46,10 @@ import {
 } from "../types/message";
 import { RootActions } from "../types/rootActions";
 import { SignerActions } from "../types/signerActions";
+import {
+  SignerConfiguration,
+  TwoFactorAuthConfig,
+} from "../types/signerConfiguration";
 import { createMessageCallback } from "../utils/createMessageCallback";
 import { createTemporaryMessageListener } from "../utils/createTemporaryMessageListener";
 import { sandboxFrame } from "../utils/sandboxFrame";
@@ -238,7 +242,9 @@ const authenticate2FAUser = async (data: string): Promise<void> => {
   const result = await validate2FAUser(data);
   // if anyone is listening to this event
   window.dispatchEvent(
-    new CustomEvent("2faUserAuthenticated", { detail: result }),
+    new CustomEvent(CUSTODIAN_AUTH_2FA_AUTHENTICATED_CUSTOM_EVENT, {
+      detail: result,
+    }),
   );
 };
 
@@ -265,14 +271,16 @@ const check2FAUser = async (idToken: string): Promise<boolean> => {
   return false;
 };
 
-const authenticateWith2FA = async (): Promise<boolean> => {
+const setup2faTransponder = async (): Promise<boolean> => {
   return new Promise((resolve) => {
+    // client needs to send token, which this library will intercept and respond by dispatching this event
+    // catch it and resolve this promise to set as authenticated
     window.addEventListener(
-      "2faUserAuthenticated",
+      CUSTODIAN_AUTH_2FA_AUTHENTICATED_CUSTOM_EVENT,
       (e) => {
         const event = e as CustomEvent<boolean>;
         if (event.detail !== undefined && event.detail) {
-          resolve(true);
+          resolve(event.detail);
         } else resolve(false);
       },
       { once: true },
@@ -298,14 +306,14 @@ const setupAuthButton = (
         auth2.disconnect();
 
         return sendAuthMessage(
-          CUSTODIAN_AUTH_FAILED_EVENT,
+          CUSTODIAN_BASIC_AUTH_FAILED_EVENT,
           "required_scopes_missing",
         );
       }
       // Create the wallet (ask the signer to do so actually)
       const authInfo: GoogleAuthInfo = transformGooglesResponse(user);
       // Now let the signer know
-      sendAuthMessage(CUSTODIAN_AUTH_SUCCEEDED_EVENT, authInfo);
+      sendAuthMessage(CUSTODIAN_BASIC_AUTH_SUCCEEDED_EVENT, authInfo);
       // Setup module globals
       moduleGlobals.accessToken = authInfo.accessToken;
       moduleGlobals.mnemonicLength = mnemonicLength;
@@ -316,10 +324,10 @@ const setupAuthButton = (
         const is2fauser = await check2FAUser(authInfo.accessToken.idToken);
         if (is2fauser) {
           sendAuthMessage(CUSTODIAN_AUTH_2FA_STARTED_EVENT);
-          const authenticated = await authenticateWith2FA();
+          const authenticated = await setup2faTransponder();
           while (!authenticated) {
-            sendAuthMessage(CUSTODIAN_AUTH_2FA_FAILED_EVENT);
-            const res = await authenticateWith2FA();
+            sendAuthMessage(CUSTODIAN_AUTH_2FA_FAILED_ATTEMPT_EVENT);
+            const res = await setup2faTransponder();
             if (res) {
               break;
             }
@@ -331,9 +339,9 @@ const setupAuthButton = (
       await createWalletInitializeSigner(signer);
     } catch (error) {
       if (isGoogleAuthError(error)) {
-        sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error.error);
+        sendAuthMessage(CUSTODIAN_BASIC_AUTH_FAILED_EVENT, error.error);
       } else {
-        sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error);
+        sendAuthMessage(CUSTODIAN_BASIC_AUTH_FAILED_EVENT, error);
       }
     }
   };
@@ -355,7 +363,7 @@ const setupAuthButton = (
         if (dataObject.result) {
           const { error } = dataObject.result;
           if (error) {
-            sendAuthMessage(CUSTODIAN_AUTH_FAILED_EVENT, error);
+            sendAuthMessage(CUSTODIAN_BASIC_AUTH_FAILED_EVENT, error);
             return true;
           }
         }
